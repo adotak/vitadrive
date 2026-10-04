@@ -209,13 +209,20 @@ async function loadVehicles(select) {
 }
 
 function startHeroVideo() {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const v = $("#landing video");
-  v.poster = "/static/media/hero-poster.jpg";
-  for (const [src, type] of [["/static/media/hero.webm", "video/webm"], ["/static/media/hero.mp4", "video/mp4"]]) {
-    const s = document.createElement("source"); s.src = src; s.type = type; v.appendChild(s);
-  }
-  v.load(); v.play().catch(() => {});
+  const v = $("#landing video"), mq = matchMedia("(prefers-reduced-motion: reduce)");
+  const sync = () => {
+    if (mq.matches) { v.pause(); return; }
+    if (!v.querySelector("source")) {
+      v.poster = "/static/media/hero-poster.jpg";
+      for (const [src, type] of [["/static/media/hero.webm", "video/webm"], ["/static/media/hero.mp4", "video/mp4"]]) {
+        const s = document.createElement("source"); s.src = src; s.type = type; v.appendChild(s);
+      }
+      v.load();
+    }
+    v.play().catch(() => {});
+  };
+  mq.addEventListener("change", sync);
+  sync();
 }
 
 async function boot() {
