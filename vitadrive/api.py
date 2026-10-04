@@ -1,4 +1,4 @@
-"""REST API + web dashboard. Run locally with ``vitadrive serve``; on Vercel via ``api/index.py``."""
+"""REST API + web dashboard. Run locally with ``vitadrive serve``; on Vercel via the root ``app.py``."""
 from __future__ import annotations
 
 import os
