@@ -25,7 +25,7 @@ You don't need to create any tables. VitaDrive creates them the first time it st
 
 ## 3. Vercel (hosting)
 
-1. Go to https://vercel.com/new and import the `adotak/vitadrive` GitHub repo. Leave **Framework Preset** as *Other* and the build settings at their defaults.
+1. Go to https://vercel.com/new and import the `adotak/vitadrive` GitHub repo. Set **Framework Preset** to *FastAPI* (usually auto-detected) and leave the build settings at their defaults. Vercel runs the `app` object in the root `app.py`.
 2. Under **Environment Variables**, add:
 
    | Name | Value |
@@ -69,4 +69,4 @@ If `CLERK_PUBLISHABLE_KEY` is unset, login is disabled and everything belongs to
 
 - Each free tier has usage limits; check the current pricing pages.
 - Supabase pauses free projects after a period of inactivity. Unpause them from the dashboard, or upgrade.
-- Vercel function duration is capped by plan. `vercel.json` sets 60 s, which covers **Add demo cars**.
+- Vercel function duration is capped by plan; the default covers **Add demo cars**.
