@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import __version__
@@ -93,6 +94,8 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
             return fn(*args, **kwargs)
         except UnknownVehicle:
             raise HTTPException(404, "Vehicle not registered") from None
+
+    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
     @app.get("/", include_in_schema=False)
     def dashboard():
