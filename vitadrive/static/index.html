@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VitaDrive</title>
+<style>
+  :root { --bg:#0e1116; --card:#161b22; --line:#2a313c; --fg:#e6edf3; --mute:#8b949e;
+          --ok:#3fb950; --info:#58a6ff; --warning:#d29922; --critical:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; align-items:center; gap:16px; padding:14px 24px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; letter-spacing:.5px; }
+  header h1 span { color:var(--ok); }
+  select { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
+  main { padding:20px 24px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--mute); margin:0 0 12px; }
+  .wide { grid-column:1/-1; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; }
+  .ok{background:#3fb95022;color:var(--ok)} .info{background:#58a6ff22;color:var(--info)}
+  .warning{background:#d2992222;color:var(--warning)} .critical{background:#f8514922;color:var(--critical)}
+  .big { font-size:34px; font-weight:700; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .metric { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .metric .k { color:var(--mute); font-size:12px; } .metric .v { font-size:18px; font-weight:600; }
+  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--mute); font-weight:500; font-size:12px; }
+  button { background:#238636; color:#fff; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
+  form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  input { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; width:130px; }
+  .mute { color:var(--mute); }
+  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
+  .bar > div { height:100%; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vita<span>Drive</span></h1>
+  <select id="vehicle"></select>
+  <span id="status"></span>
+  <span class="mute" id="odo"></span>
+</header>
+<main>
+  <section class="card">
+    <h2>Estimated range</h2>
+    <div id="range" class="mute">No data</div>
+  </section>
+  <section class="card">
+    <h2>Active alerts</h2>
+    <div id="alerts"></div>
+  </section>
+  <section class="card wide">
+    <h2>Live vitals</h2>
+    <div class="grid" id="vitals"></div>
+  </section>
+  <section class="card wide">
+    <h2>Maintenance forecast</h2>
+    <table><thead><tr><th>Item</th><th>Status</th><th>Due date</th><th>Days left</th><th>Km left</th><th>Last service</th><th>Basis</th><th></th></tr></thead>
+      <tbody id="maint"></tbody></table>
+  </section>
+  <section class="card wide">
+    <h2>Service history</h2>
+    <table><thead><tr><th>Date</th><th>Item</th><th>Odometer</th><th>Cost</th><th>Shop</th><th>Notes</th></tr></thead>
+      <tbody id="services"></tbody></table>
+    <form id="svcForm">
+      <select name="item" id="svcItem"></select>
+      <input name="performed_on" type="date" required>
+      <input name="odometer_km" type="number" step="0.1" placeholder="Odometer km" required>
+      <input name="cost" type="number" step="0.01" placeholder="Cost">
+      <input name="shop" placeholder="Shop">
+      <input name="notes" placeholder="Notes" style="width:200px">
+      <button>Log service</button>
+    </form>
+  </section>
+  <section class="card wide">
+    <h2>Alert log</h2>
+    <table><thead><tr><th>Time</th><th>Severity</th><th>Message</th><th>State</th></tr></thead><tbody id="log"></tbody></table>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const badge = s => `<span class="badge ${s}">${s}</span>`;
+const api = (p, o) => fetch(p, o).then(r => r.ok ? (r.status === 204 ? null : r.json()) : Promise.reject(r));
+const VITALS = [
+  ["engine_oil_level_pct","Oil level","%"],["engine_oil_life_pct","Oil life","%"],["coolant_temp_c","Coolant temp","°C"],
+  ["coolant_level_pct","Coolant level","%"],["brake_fluid_level_pct","Brake fluid","%"],["brake_pad_front_mm","Front pads","mm"],
+  ["brake_pad_rear_mm","Rear pads","mm"],["tire_pressure_fl_kpa","Tire FL","kPa"],["tire_pressure_fr_kpa","Tire FR","kPa"],
+  ["tire_pressure_rl_kpa","Tire RL","kPa"],["tire_pressure_rr_kpa","Tire RR","kPa"],["tire_tread_mm","Tread","mm"],
+  ["battery_12v_voltage","12V battery","V"],["hv_battery_soc_pct","HV charge","%"],["hv_battery_soh_pct","HV health","%"],
+  ["hv_battery_temp_c","HV temp","°C"],["fuel_level_pct","Fuel","%"],["washer_fluid_level_pct","Washer fluid","%"],
+];
+let vin = null;
+
+async function loadVehicles() {
+  const vs = await api("/api/vehicles");
+  $("#vehicle").innerHTML = vs.map(v => `<option value="${esc(v.vin)}">${esc(v.year)} ${esc(v.make)} ${esc(v.model)} — ${esc(v.vin)}</option>`).join("")
+    || "<option>No vehicles — run `vitadrive demo`</option>";
+  vin = vs[0]?.vin; if (vin) refresh();
+}
+
+async function refresh() {
+  const [rep, services, log] = await Promise.all([
+    api(`/api/vehicles/${vin}/report`), api(`/api/vehicles/${vin}/services`), api(`/api/vehicles/${vin}/alerts?limit=50`)]);
+  $("#status").innerHTML = badge(rep.status);
+  const lr = rep.latest_reading;
+  $("#odo").textContent = lr ? `${Math.round(lr.odometer_km).toLocaleString()} km · updated ${new Date(lr.timestamp).toLocaleString()}` : "";
+  const alertMetrics = new Map(rep.active_alerts.map(a => [a.metric, a.severity]));
+  $("#vitals").innerHTML = VITALS.filter(([k]) => lr && lr[k] != null).map(([k, l, u]) => {
+    const s = alertMetrics.get(k) || "ok";
+    return `<div class="metric"><div class="k">${l}</div><div class="v" style="color:var(--${s})">${lr[k]} <span class="mute" style="font-size:12px">${u}</span></div></div>`;
+  }).join("") + (lr?.dtc_codes?.length ? `<div class="metric"><div class="k">DTC codes</div><div class="v" style="color:var(--warning)">${lr.dtc_codes.map(esc).join(", ")}</div></div>` : "");
+  const r = rep.range;
+  $("#range").innerHTML = r ? `<div class="big" style="color:var(--${r.status})">${Math.round(r.range_km)} km</div>
+    <div class="mute">${r.level_pct}% ${r.energy_source} · ${r.consumption_per_100km}/100km · ${esc(r.consumption_basis)}</div>
+    <div class="bar"><div style="width:${r.level_pct}%;background:var(--${r.status})"></div></div>` : "No data";
+  $("#alerts").innerHTML = rep.active_alerts.length ? rep.active_alerts.map(a =>
+    `<div style="margin-bottom:8px">${badge(a.severity)} ${esc(a.message)} <button class="ghost" onclick="ack(${a.id})">Dismiss</button></div>`).join("")
+    : `<span class="mute">All systems normal</span>`;
+  $("#maint").innerHTML = rep.maintenance.map(m => `<tr><td>${esc(m.label)}</td><td>${badge(m.status)}</td><td>${m.due_date}</td>
+    <td>${m.days_remaining}</td><td>${m.km_remaining == null ? "—" : Math.round(m.km_remaining).toLocaleString()}</td>
+    <td>${m.last_service_date ? `${m.last_service_date} @ ${Math.round(m.last_service_km).toLocaleString()} km` : "—"}</td>
+    <td class="mute">${esc(m.reason)}</td><td><button class="ghost" onclick="prefill('${m.item}')">Log</button></td></tr>`).join("");
+  $("#svcItem").innerHTML = rep.maintenance.map(m => `<option value="${m.item}">${esc(m.label)}</option>`).join("");
+  $("#services").innerHTML = services.map(s => `<tr><td>${s.performed_on}</td><td>${esc(s.item)}</td>
+    <td>${Math.round(s.odometer_km).toLocaleString()}</td><td>${s.cost ?? "—"}</td><td>${esc(s.shop) || "—"}</td><td>${esc(s.notes)}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="mute">No services recorded yet</td></tr>`;
+  $("#log").innerHTML = log.map(a => `<tr><td>${new Date(a.timestamp).toLocaleString()}</td><td>${badge(a.severity)}</td>
+    <td>${esc(a.message)}</td><td class="mute">${a.acknowledged ? "resolved" : "open"}</td></tr>`).join("");
+  if (lr) { const f = $("#svcForm"); f.odometer_km.value ||= Math.round(lr.odometer_km); f.performed_on.value ||= new Date().toISOString().slice(0, 10); }
+}
+
+window.ack = async id => { await api(`/api/alerts/${id}/ack`, {method: "POST"}); refresh(); };
+window.prefill = item => { $("#svcItem").value = item; $("#svcForm").scrollIntoView({behavior: "smooth"}); };
+$("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); refresh(); };
+$("#svcForm").onsubmit = async e => {
+  e.preventDefault();
+  const body = Object.fromEntries([...new FormData(e.target)].filter(([, v]) => v !== ""));
+  await api(`/api/vehicles/${vin}/services`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  e.target.reset(); refresh();
+};
+loadVehicles(); setInterval(() => vin && refresh(), 15000);
+</script>
+</body>
+</html>
