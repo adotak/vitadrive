@@ -29,7 +29,7 @@ vitadrive = "vitadrive.cli:main"
 include = ["vitadrive*"]
 
 [tool.setuptools.package-data]
-vitadrive = ["static/*"]
+vitadrive = ["static/*", "static/img/*", "static/media/*"]
 
 [tool.ruff]
 line-length = 120
