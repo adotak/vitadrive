@@ -61,7 +61,6 @@
   @media (max-width:900px) { #landing .hero { grid-template-columns:1fr; } #landing .brand { margin-bottom:24px; }
     .gallery { grid-template-columns:1fr 1fr; } }
   @media (max-width:560px) { .gallery { grid-template-columns:1fr; } }
-  @media (prefers-reduced-motion:reduce) { #landing video { display:none; } }
 </style>
 </head>
 <body>
@@ -210,10 +209,10 @@ async function loadVehicles(select) {
 
 function startHeroVideo() {
   const v = $("#landing video"), mq = matchMedia("(prefers-reduced-motion: reduce)");
+  v.poster = "/static/media/hero-poster.jpg";
   const sync = () => {
     if (mq.matches) { v.pause(); return; }
     if (!v.querySelector("source")) {
-      v.poster = "/static/media/hero-poster.jpg";
       for (const [src, type] of [["/static/media/hero.webm", "video/webm"], ["/static/media/hero.mp4", "video/mp4"]]) {
         const s = document.createElement("source"); s.src = src; s.type = type; v.appendChild(s);
       }
