@@ -34,6 +34,34 @@
   .mute { color:var(--mute); }
   .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
   .bar > div { height:100%; }
+  #landing { position:relative; min-height:100vh; }
+  #landing .hero { position:relative; min-height:100vh; display:grid; grid-template-columns:1.1fr 1fr; align-items:center;
+    gap:48px; padding:48px 6vw; overflow:hidden; }
+  #landing video, #landing .shade { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
+  #landing .shade { background:linear-gradient(90deg,#0e1116f2 0%,#0e1116b3 45%,#0e111666 100%),
+    linear-gradient(0deg,#0e1116 0%,transparent 30%); }
+  #landing .hero > :not(video):not(.shade) { position:relative; z-index:1; }
+  #landing .brand { font-size:22px; font-weight:700; letter-spacing:.5px; margin-bottom:56px; }
+  #landing .brand span, #landing h1 em { color:var(--ok); font-style:normal; }
+  #landing h1 { font-size:clamp(34px,4.6vw,64px); line-height:1.05; margin:0 0 18px; letter-spacing:-1px; }
+  #landing .lead { font-size:18px; color:#c9d1d9; max-width:560px; margin:0 0 28px; }
+  #landing ul { list-style:none; padding:0; margin:0; display:grid; gap:10px; color:#c9d1d9; font-size:15px; }
+  #landing li::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--ok);
+    margin-right:12px; box-shadow:0 0 10px var(--ok); }
+  #signin { justify-self:center; }
+  .gallery { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; padding:24px 6vw 64px; }
+  .gallery figure { position:relative; margin:0; border-radius:14px; overflow:hidden; aspect-ratio:16/9;
+    border:1px solid var(--line); background:var(--card); }
+  .gallery img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .6s ease; }
+  .gallery figure:hover img { transform:scale(1.06); }
+  .gallery figcaption { position:absolute; inset:auto 0 0 0; padding:28px 16px 14px;
+    background:linear-gradient(0deg,#0e1116e6,transparent); }
+  .gallery b { display:block; font-size:15px; } .gallery small { color:#c9d1d9; }
+  .gallery-title { padding:48px 6vw 0; font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--mute); }
+  @media (max-width:900px) { #landing .hero { grid-template-columns:1fr; } #landing .brand { margin-bottom:24px; }
+    .gallery { grid-template-columns:1fr 1fr; } }
+  @media (max-width:560px) { .gallery { grid-template-columns:1fr; } }
+  @media (prefers-reduced-motion:reduce) { #landing video { display:none; } }
 </style>
 </head>
 <body>
@@ -47,7 +75,56 @@
   <button class="ghost" id="demoBtn">Add demo cars</button>
   <div id="userButton"></div>
 </header>
-<div id="signin" style="display:none;justify-content:center;padding:60px 0"></div>
+<div id="landing" hidden>
+  <section class="hero">
+    <video autoplay muted loop playsinline preload="auto" poster="/static/media/hero-poster.jpg">
+      <source src="/static/media/hero.webm" type="video/webm">
+      <source src="/static/media/hero.mp4" type="video/mp4">
+    </video>
+    <div class="shade"></div>
+    <div>
+      <div class="brand">Vita<span>Drive</span></div>
+      <h1>Your car's vitals,<br><em>always in view.</em></h1>
+      <p class="lead">Real-time health monitoring, early warnings and predicted maintenance dates for petrol, hybrid and electric cars.</p>
+      <ul>
+        <li>Warnings before fluids, tires or batteries drop too low</li>
+        <li>Service dates forecast from how you actually drive</li>
+        <li>A permanent record of every reading, alert and service</li>
+      </ul>
+    </div>
+    <div id="signin"></div>
+  </section>
+  <div class="gallery-title">What VitaDrive watches</div>
+  <section class="gallery">
+    <figure><img src="/static/img/cockpit.jpg" srcset="/static/img/cockpit.jpg 1280w, /static/img/cockpit-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Live vitals">
+      <figcaption><b>Live vitals</b><small>Every sensor, streamed from the car</small></figcaption></figure>
+    <figure><img src="/static/img/gauges.jpg" srcset="/static/img/gauges.jpg 1280w, /static/img/gauges-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Threshold warnings">
+      <figcaption><b>Threshold warnings</b><small>Warning and critical levels per reading</small></figcaption></figure>
+    <figure><img src="/static/img/obd-scanner.jpg" srcset="/static/img/obd-scanner.jpg 1280w, /static/img/obd-scanner-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Fault codes">
+      <figcaption><b>Fault codes</b><small>OBD-II trouble codes, triaged by severity</small></figcaption></figure>
+    <figure><img src="/static/img/engine-bay.jpg" srcset="/static/img/engine-bay.jpg 1280w, /static/img/engine-bay-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Oil &amp; coolant">
+      <figcaption><b>Oil &amp; coolant</b><small>Level, pressure, temperature and oil life</small></figcaption></figure>
+    <figure><img src="/static/img/exhaust.jpg" srcset="/static/img/exhaust.jpg 1280w, /static/img/exhaust-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Service records">
+      <figcaption><b>Service records</b><small>Every job logged with cost, shop and odometer</small></figcaption></figure>
+    <figure><img src="/static/img/brakes.jpg" srcset="/static/img/brakes.jpg 1280w, /static/img/brakes-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Brake &amp; tire wear">
+      <figcaption><b>Brake &amp; tire wear</b><small>Pad and tread wear predicted to a date</small></figcaption></figure>
+    <figure><img src="/static/img/dyno.jpg" srcset="/static/img/dyno.jpg 1280w, /static/img/dyno-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Range estimate">
+      <figcaption><b>Range estimate</b><small>Remaining km from real consumption</small></figcaption></figure>
+    <figure><img src="/static/img/tuning.jpg" srcset="/static/img/tuning.jpg 1280w, /static/img/tuning-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Gateway API">
+      <figcaption><b>Gateway API</b><small>Per-vehicle keys for telematics devices</small></figcaption></figure>
+    <figure><img src="/static/img/suspension.jpg" srcset="/static/img/suspension.jpg 1280w, /static/img/suspension-4k.jpg 3840w"
+      sizes="(max-width:560px) 100vw, (max-width:900px) 50vw, 33vw" loading="lazy" alt="Maintenance forecast">
+      <figcaption><b>Maintenance forecast</b><small>Due by distance or date, whichever first</small></figcaption></figure>
+  </section>
+</div>
 <section class="card" id="empty" hidden style="max-width:720px;margin:40px auto">
   <h2>Add your first vehicle</h2>
   <p class="mute">Register a car, then send readings from its telematics gateway or OBD-II device using its API key.
@@ -146,8 +223,9 @@ async function boot() {
     });
     await Clerk.load();
     if (!Clerk.user) {
-      document.querySelectorAll("header > :not(h1)").forEach(e => e.hidden = true);
-      $("#signin").style.display = "flex"; Clerk.mountSignIn($("#signin"));
+      document.querySelector("header").hidden = true; $("main").hidden = true;
+      $("#landing").hidden = false;
+      Clerk.mountSignIn($("#signin"), {appearance: {variables: {colorPrimary: "#238636"}}});
       Clerk.addListener(({user}) => user && location.reload());
       return;
     }
