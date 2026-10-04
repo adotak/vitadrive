@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
-from .adapters.simulator import VehicleSimulator
-from .models import Powertrain, ServiceRecord, Severity, Vehicle
+from .demo import DEMO_VEHICLES, seed_vehicle
+from .models import Severity
 from .service import VitaDrive
-from .storage import Store
+from .storage import LOCAL_OWNER, Store
 
 _COLORS = {Severity.OK: "\033[32m", Severity.INFO: "\033[36m", Severity.WARNING: "\033[33m",
            Severity.CRITICAL: "\033[31m"}
@@ -19,30 +20,20 @@ def _c(sev: Severity, text: str) -> str:
     return f"{_COLORS[sev]}{text}{_RESET}" if sys.stdout.isatty() else text
 
 
-DEMO_VEHICLES = [
-    Vehicle(vin="VDDEMOICE0000001", make="Toyota", model="Corolla", year=2023, powertrain=Powertrain.ICE,
-            tank_capacity_l=50, rated_consumption=6.5),
-    Vehicle(vin="VDDEMOEV00000002", make="Tesla", model="Model 3", year=2024, powertrain=Powertrain.EV,
-            battery_capacity_kwh=60, rated_consumption=15),
-]
-
-
 def cmd_demo(args) -> None:
     vd = VitaDrive(Store(args.db))
     for i, vehicle in enumerate(DEMO_VEHICLES):
-        vd.store.upsert_vehicle(vehicle)
-        sim = VehicleSimulator(vehicle, start_odometer_km=30_000 + i * 12_000, seed=args.seed + i)
-        count = 0
-        for reading in sim.history(days=args.days):
-            vd.ingest(reading)
-            count += 1
-            if count == 20:
-                for item in ("tire_rotation", "cabin_filter", "wiper_blades"):
-                    vd.store.add_service(ServiceRecord(
-                        vin=vehicle.vin, item=item, performed_on=reading.timestamp.date(),
-                        odometer_km=reading.odometer_km, cost=45.0, shop="VitaDrive Demo Garage"))
+        count = seed_vehicle(vd, vehicle, owner_id=args.owner, days=args.days, seed=args.seed + i,
+                             start_odometer_km=30_000 + i * 12_000)
         print(f"Seeded {count} readings for {vehicle.year} {vehicle.make} {vehicle.model} ({vehicle.vin})")
-    print(f"Database: {args.db}. Run `vitadrive serve --db {args.db}` to open the dashboard.")
+    print("Run `vitadrive serve` to open the dashboard.")
+
+
+def cmd_api_key(args) -> None:
+    store = Store(args.db)
+    if store.get_vehicle(args.vin) is None:
+        sys.exit(f"Unknown vehicle {args.vin}")
+    print(store.rotate_api_key(args.vin))
 
 
 def cmd_report(args) -> None:
@@ -70,11 +61,9 @@ def cmd_report(args) -> None:
 
 
 def cmd_serve(args) -> None:
-    import os
-
     import uvicorn
 
-    os.environ["VITADRIVE_DB"] = args.db
+    os.environ["DATABASE_URL"] = args.db
     uvicorn.run("vitadrive.api:get_app", factory=True, host=args.host, port=args.port)
 
 
@@ -91,17 +80,23 @@ def cmd_obd(args) -> None:
 
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="vitadrive", description="Vehicle vitals monitoring & predictive maintenance")
-    p.add_argument("--db", default="vitadrive.db", help="SQLite database path")
+    p.add_argument("--db", default=os.environ.get("DATABASE_URL", "vitadrive.db"),
+                   help="SQLite file path or Postgres URL (default: $DATABASE_URL or vitadrive.db)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser("demo", help="Seed the database with simulated vehicles")
     d.add_argument("--days", type=int, default=180)
     d.add_argument("--seed", type=int, default=7)
+    d.add_argument("--owner", default=LOCAL_OWNER, help="Owner user ID (Clerk user ID when auth is enabled)")
     d.set_defaults(fn=cmd_demo)
 
     r = sub.add_parser("report", help="Print a vehicle health report")
     r.add_argument("vin")
     r.set_defaults(fn=cmd_report)
+
+    k = sub.add_parser("api-key", help="Issue a new ingest API key for a vehicle")
+    k.add_argument("vin")
+    k.set_defaults(fn=cmd_api_key)
 
     s = sub.add_parser("serve", help="Run the REST API and dashboard")
     s.add_argument("--host", default="127.0.0.1")

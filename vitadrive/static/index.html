@@ -8,6 +8,7 @@
   :root { --bg:#0e1116; --card:#161b22; --line:#2a313c; --fg:#e6edf3; --mute:#8b949e;
           --ok:#3fb950; --info:#58a6ff; --warning:#d29922; --critical:#f85149; }
   * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
   body { margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
   header { display:flex; align-items:center; gap:16px; padding:14px 24px; border-bottom:1px solid var(--line); }
   header h1 { font-size:18px; margin:0; letter-spacing:.5px; }
@@ -41,8 +42,29 @@
   <select id="vehicle"></select>
   <span id="status"></span>
   <span class="mute" id="odo"></span>
+  <span style="flex:1"></span>
+  <button class="ghost" id="apiKeyBtn" hidden>API key</button>
+  <button class="ghost" id="demoBtn">Add demo cars</button>
+  <div id="userButton"></div>
 </header>
-<main>
+<div id="signin" style="display:none;justify-content:center;padding:60px 0"></div>
+<section class="card" id="empty" hidden style="max-width:720px;margin:40px auto">
+  <h2>Add your first vehicle</h2>
+  <p class="mute">Register a car, then send readings from its telematics gateway or OBD-II device using its API key.
+    Or click <b>Add demo cars</b> above to explore with simulated data.</p>
+  <form id="vehForm">
+    <input name="vin" placeholder="VIN" required maxlength="17">
+    <input name="make" placeholder="Make" required>
+    <input name="model" placeholder="Model" required>
+    <input name="year" type="number" placeholder="Year" required>
+    <select name="powertrain"><option value="ice">Petrol/Diesel</option><option value="hybrid">Hybrid</option>
+      <option value="ev">Electric</option></select>
+    <input name="tank_capacity_l" type="number" step="0.1" placeholder="Tank (L)">
+    <input name="battery_capacity_kwh" type="number" step="0.1" placeholder="Battery (kWh)">
+    <button>Add vehicle</button>
+  </form>
+</section>
+<main id="main" hidden>
   <section class="card">
     <h2>Estimated range</h2>
     <div id="range" class="mute">No data</div>
@@ -83,7 +105,15 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const badge = s => `<span class="badge ${s}">${s}</span>`;
-const api = (p, o) => fetch(p, o).then(r => r.ok ? (r.status === 204 ? null : r.json()) : Promise.reject(r));
+let authEnabled = false;
+async function api(path, opts = {}) {
+  const headers = {...(opts.headers || {})};
+  if (authEnabled && window.Clerk?.session) headers.Authorization = `Bearer ${await Clerk.session.getToken()}`;
+  if (opts.body) headers["Content-Type"] = "application/json";
+  const r = await fetch(path, {...opts, headers});
+  if (!r.ok) { const msg = (await r.json().catch(() => ({}))).detail || r.statusText; alert(msg); throw new Error(msg); }
+  return r.status === 204 ? null : r.json();
+}
 const VITALS = [
   ["engine_oil_level_pct","Oil level","%"],["engine_oil_life_pct","Oil life","%"],["coolant_temp_c","Coolant temp","°C"],
   ["coolant_level_pct","Coolant level","%"],["brake_fluid_level_pct","Brake fluid","%"],["brake_pad_front_mm","Front pads","mm"],
@@ -94,11 +124,37 @@ const VITALS = [
 ];
 let vin = null;
 
-async function loadVehicles() {
+async function loadVehicles(select) {
   const vs = await api("/api/vehicles");
-  $("#vehicle").innerHTML = vs.map(v => `<option value="${esc(v.vin)}">${esc(v.year)} ${esc(v.make)} ${esc(v.model)} — ${esc(v.vin)}</option>`).join("")
-    || "<option>No vehicles — run `vitadrive demo`</option>";
-  vin = vs[0]?.vin; if (vin) refresh();
+  $("#vehicle").innerHTML = vs.map(v => `<option value="${esc(v.vin)}">${esc(v.year)} ${esc(v.make)} ${esc(v.model)} — ${esc(v.vin)}</option>`).join("");
+  vin = vs.find(v => v.vin === select)?.vin || vs[0]?.vin;
+  $("#vehicle").value = vin || "";
+  $("#main").hidden = $("#vehicle").hidden = $("#apiKeyBtn").hidden = !vin;
+  $("#empty").hidden = !!vin;
+  if (vin) refresh(); else { $("#status").innerHTML = ""; $("#odo").textContent = ""; }
+}
+
+async function boot() {
+  const cfg = await fetch("/api/config").then(r => r.json());
+  authEnabled = cfg.auth_enabled;
+  if (authEnabled) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = `https://${cfg.clerk_frontend_api}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`;
+      s.crossOrigin = "anonymous"; s.dataset.clerkPublishableKey = cfg.clerk_publishable_key;
+      s.onload = resolve; s.onerror = reject; document.head.appendChild(s);
+    });
+    await Clerk.load();
+    if (!Clerk.user) {
+      document.querySelectorAll("header > :not(h1)").forEach(e => e.hidden = true);
+      $("#signin").style.display = "flex"; Clerk.mountSignIn($("#signin"));
+      Clerk.addListener(({user}) => user && location.reload());
+      return;
+    }
+    Clerk.mountUserButton($("#userButton"));
+  }
+  await loadVehicles();
+  setInterval(() => vin && refresh(), 15000);
 }
 
 async function refresh() {
@@ -138,10 +194,28 @@ $("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); ref
 $("#svcForm").onsubmit = async e => {
   e.preventDefault();
   const body = Object.fromEntries([...new FormData(e.target)].filter(([, v]) => v !== ""));
-  await api(`/api/vehicles/${vin}/services`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  await api(`/api/vehicles/${vin}/services`, {method: "POST", body: JSON.stringify(body)});
   e.target.reset(); refresh();
 };
-loadVehicles(); setInterval(() => vin && refresh(), 15000);
+$("#demoBtn").onclick = async e => {
+  e.target.disabled = true; e.target.textContent = "Simulating 90 days…";
+  try { const vs = await api("/api/demo", {method: "POST"}); await loadVehicles(vs[0]?.vin); }
+  finally { e.target.disabled = false; e.target.textContent = "Add demo cars"; }
+};
+$("#apiKeyBtn").onclick = async () => {
+  if (!confirm("Generate a new API key for this vehicle? Any previous key stops working.")) return;
+  const {api_key} = await api(`/api/vehicles/${vin}/api-key`, {method: "POST"});
+  prompt("Send readings with header  X-API-Key: <key>  to POST /api/vehicles/" + vin + "/readings\n" +
+         "Copy it now - it won't be shown again:", api_key);
+};
+$("#vehForm").onsubmit = async e => {
+  e.preventDefault();
+  const body = Object.fromEntries([...new FormData(e.target)].filter(([, v]) => v !== ""));
+  body.year = +body.year; body.vin = body.vin.toUpperCase();
+  await api(`/api/vehicles/${body.vin}`, {method: "PUT", body: JSON.stringify(body)});
+  e.target.reset(); loadVehicles(body.vin);
+};
+boot();
 </script>
 </body>
 </html>

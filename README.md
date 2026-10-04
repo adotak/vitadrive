@@ -20,6 +20,8 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **Range estimate** | Remaining km from fuel/charge level using *learned* consumption from recent driving (refuel/recharge events ignored), falling back to rated consumption for new cars. |
 | **Records** | SQLite log of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
 | **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
+| **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. |
+| **Deployment** | Vercel (serverless) + Supabase Postgres. SQLite still works for local use. See [docs/DEPLOY.md](docs/DEPLOY.md). |
 
 ## Quick start
 
@@ -39,13 +41,17 @@ vitadrive obd <VIN> --odometer 42000   # odometer only needed if the car doesn't
 
 ## Integrating with a vehicle
 
-Push a reading from the car's gateway whenever new data is available (any field can be omitted):
+Register the vehicle, issue it an API key, then have the car's gateway push a reading whenever new data is
+available (any field can be omitted). The examples below use a local server without login; on a deployed
+instance, register the car and get its key from the dashboard instead.
 
 ```bash
 curl -X PUT localhost:8000/api/vehicles/1HGCM82633A004352 -H 'content-type: application/json' \
   -d '{"vin":"1HGCM82633A004352","make":"Honda","model":"Civic","year":2024,"powertrain":"ice","tank_capacity_l":47}'
 
-curl -X POST localhost:8000/api/vehicles/1HGCM82633A004352/readings -H 'content-type: application/json' \
+KEY=$(curl -s -X POST localhost:8000/api/vehicles/1HGCM82633A004352/api-key | python3 -c 'import sys,json;print(json.load(sys.stdin)["api_key"])')
+
+curl -X POST localhost:8000/api/vehicles/1HGCM82633A004352/readings -H "X-API-Key: $KEY" -H 'content-type: application/json' \
   -d '{"vin":"1HGCM82633A004352","odometer_km":42010,"engine_oil_life_pct":12,"tire_pressure_fl_kpa":195,"dtc_codes":["P0420"]}'
 # -> returns any newly raised alerts
 ```
@@ -53,13 +59,20 @@ curl -X POST localhost:8000/api/vehicles/1HGCM82633A004352/readings -H 'content-
 | Endpoint | Purpose |
 |---|---|
 | `PUT /api/vehicles/{vin}` | Register / update a vehicle |
-| `POST /api/vehicles/{vin}/readings` | Ingest telemetry, returns new alerts |
+| `POST /api/vehicles/{vin}/api-key` | Issue a new ingest API key (shown once) |
+| `POST /api/vehicles/{vin}/readings` | Ingest telemetry (`X-API-Key` header), returns new alerts |
 | `GET /api/vehicles/{vin}/report` | Overall status, latest vitals, active alerts, maintenance forecast, range |
 | `GET /api/vehicles/{vin}/maintenance` | Due date / km remaining for every service item |
 | `GET /api/vehicles/{vin}/range` | Remaining range estimate |
 | `GET/POST /api/vehicles/{vin}/services` | Service history / log a service |
 | `GET /api/vehicles/{vin}/alerts?active_only=true` | Alert log |
 | `POST /api/alerts/{id}/ack` | Dismiss an alert |
+
+## Going live
+
+Deploy on **Vercel** with a **Supabase** Postgres database and **Clerk** login. The step-by-step guide is in
+[docs/DEPLOY.md](docs/DEPLOY.md). Settings are read from environment variables (see `.env.example`):
+`DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_AUTHORIZED_PARTIES`.
 
 ## Customising
 
@@ -74,7 +87,9 @@ vitadrive/
   monitor.py          threshold + DTC evaluation
   maintenance.py      schedule and due-date prediction
   range_estimator.py  remaining range
-  storage.py          SQLite history
+  storage.py          SQLite / PostgreSQL history (SQLAlchemy)
+  auth.py             Clerk session verification
+  demo.py             simulated demo vehicles
   service.py          orchestration (ingest, report)
   api.py              FastAPI REST API + dashboard
   cli.py              command line
@@ -85,6 +100,9 @@ vitadrive/
 
 ```bash
 ruff check . && pytest
+# include the Postgres tests:
+docker run -d -e POSTGRES_PASSWORD=devpass -e POSTGRES_DB=vitadrive -p 5432:5432 postgres:16
+VITADRIVE_TEST_POSTGRES=postgresql://postgres:devpass@localhost:5432/vitadrive pytest
 ```
 
 ## Limitations

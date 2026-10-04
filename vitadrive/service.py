@@ -42,6 +42,10 @@ class VitaDrive:
     def ingest(self, reading: SensorReading) -> list[Alert]:
         """Record a reading and raise new alerts. Repeated alerts for an unacknowledged
         condition at the same severity are not duplicated."""
+        with self.store.transaction():
+            return self._ingest(reading)
+
+    def _ingest(self, reading: SensorReading) -> list[Alert]:
         vehicle = self._vehicle(reading.vin)
         self.store.add_reading(reading)
         current = self.monitor.evaluate(reading, vehicle.powertrain)
@@ -73,7 +77,7 @@ class VitaDrive:
         active = self.store.alerts(vin, include_acknowledged=False, limit=50)
         maintenance = self.maintenance(vin, today=today)
         rng = self.range(vin)
-        statuses = [overall_status(current)] + [m.status for m in maintenance]
+        statuses = [overall_status(current + active)] + [m.status for m in maintenance]
         if rng:
             statuses.append(rng.status)
         order = [Severity.OK, Severity.INFO, Severity.WARNING, Severity.CRITICAL]
