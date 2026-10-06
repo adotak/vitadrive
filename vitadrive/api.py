@@ -6,10 +6,11 @@ import secrets
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .auth import AuthError, ClerkAuth
@@ -67,6 +68,14 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
     vd = VitaDrive(Store(db or _default_db()))
     auth = auth or ClerkAuth.from_env()
     app.state.vitadrive = vd
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException):
+        body: dict = {"detail": exc.detail}
+        if exc.status_code == 404 and exc.detail == "Not Found":
+            # Unmatched route: echo what the app received, to debug host path rewriting.
+            body.update(path=request.url.path, root_path=request.scope.get("root_path", ""))
+        return JSONResponse(body, status_code=exc.status_code, headers=getattr(exc, "headers", None))
 
     def current_user(authorization: str | None = Header(default=None)) -> str:
         try:
