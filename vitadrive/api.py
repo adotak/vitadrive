@@ -6,11 +6,10 @@ import secrets
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .auth import AuthError, ClerkAuth
@@ -69,14 +68,6 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
     auth = auth or ClerkAuth.from_env()
     app.state.vitadrive = vd
 
-    @app.exception_handler(StarletteHTTPException)
-    async def http_error(request: Request, exc: StarletteHTTPException):
-        body: dict = {"detail": exc.detail}
-        if exc.status_code == 404 and exc.detail == "Not Found":
-            # Unmatched route: echo what the app received, to debug host path rewriting.
-            body.update(path=request.url.path, root_path=request.scope.get("root_path", ""))
-        return JSONResponse(body, status_code=exc.status_code, headers=getattr(exc, "headers", None))
-
     def current_user(authorization: str | None = Header(default=None)) -> str:
         try:
             return auth.user_id(authorization)
@@ -105,6 +96,14 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
             raise HTTPException(404, "Vehicle not registered") from None
 
     app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return FileResponse(_STATIC / "icon-192.png")
+
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    def manifest():
+        return FileResponse(_STATIC / "manifest.webmanifest", media_type="application/manifest+json")
 
     @app.get("/", include_in_schema=False)
     def dashboard():
