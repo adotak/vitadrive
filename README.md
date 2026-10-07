@@ -2,11 +2,15 @@
 
 **Vehicle vitals monitoring, threshold warnings, predictive maintenance and a full service record for modern cars.**
 
+**Live:** https://vitadrive.vercel.app
+
 VitaDrive collects telemetry from a car (OEM telematics / CAN gateway, OBD-II dongle, or the built-in simulator),
 checks every reading against safety thresholds, raises warnings and critical alerts, predicts when each
 maintenance item will be due, estimates remaining driving range, and keeps a permanent history of readings,
 alerts and services. It runs as a headless service with a REST API, so it can be built into an in-vehicle
 infotainment unit, a fleet backend, or a phone companion app.
+
+![Sign-in screen](docs/signin.jpg)
 
 ![Dashboard](docs/dashboard.png)
 
@@ -18,9 +22,10 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **Threshold alerts** | Warning and critical limits per metric (low and/or high), filtered by powertrain (ICE / hybrid / EV). Safety-critical DTCs (misfire, ABS, airbag, HV system) are escalated. Alerts are de-duplicated, resolve automatically when a reading returns to normal, and can be dismissed. |
 | **Predictive maintenance** | 15 standard service items with distance *and* time intervals (whichever comes first). Distance limits are converted into calendar dates using the car's observed daily mileage. Wear items (brake pads, tires, oil life) use a regression of the sensor value vs. odometer to predict the exact date the limit will be hit. |
 | **Range estimate** | Remaining km from fuel/charge level using *learned* consumption from recent driving (refuel/recharge events ignored), falling back to rated consumption for new cars. |
-| **Records** | SQLite log of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
+| **Records** | Permanent log (Postgres in production, SQLite locally) of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
 | **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
 | **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. |
+| **Installable app** | Web app manifest and icons, so the dashboard can be installed from the browser ("Add to Home Screen" / "Install app") and opens full-screen like a native app. |
 | **Deployment** | Vercel (serverless) + Supabase Postgres. SQLite still works for local use. See [docs/DEPLOY.md](docs/DEPLOY.md). |
 
 ## Quick start
@@ -73,6 +78,16 @@ curl -X POST localhost:8000/api/vehicles/1HGCM82633A004352/readings -H "X-API-Ke
 Deploy on **Vercel** with a **Supabase** Postgres database and **Clerk** login. The step-by-step guide is in
 [docs/DEPLOY.md](docs/DEPLOY.md). Settings are read from environment variables (see `.env.example`):
 `DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_AUTHORIZED_PARTIES`.
+
+Troubleshooting:
+
+- **Every page says `{"detail":"Not Found"}`**: check that the Vercel *Framework Preset* is **FastAPI** and that the
+  entrypoint is the root `app.py`, then redeploy without the build cache.
+- **"Token issued for an unauthorized origin" after signing in**: `CLERK_AUTHORIZED_PARTIES` doesn't list the
+  address the login came from (the error names it). Set it to your site URL, e.g. `https://vitadrive.vercel.app`,
+  and redeploy.
+- **"Development mode" under the sign-in box**: Clerk test keys (`pk_test_...`) are in use. Production keys
+  require your own domain.
 
 ## Customising
 
