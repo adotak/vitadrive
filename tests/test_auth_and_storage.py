@@ -129,3 +129,11 @@ def test_postgres_api_flow():
     finally:
         for vin in vins:
             client.delete(f"/api/vehicles/{vin}")
+
+
+def test_authorized_parties_tolerate_formatting(monkeypatch):
+    monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", PK)
+    monkeypatch.setenv("CLERK_AUTHORIZED_PARTIES", ' "https://VitaDrive.test/" , ')
+    from vitadrive.auth import _origin
+    auth = ClerkAuth.from_env()
+    assert [_origin(p) for p in auth.authorized_parties] == ["https://vitadrive.test"]
