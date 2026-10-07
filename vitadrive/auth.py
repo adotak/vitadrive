@@ -33,6 +33,11 @@ def frontend_api_from_publishable_key(key: str) -> str:
     return decoded.rstrip("$")
 
 
+def _origin(url: str) -> str:
+    """Normalise an origin for comparison: trims spaces/quotes, a trailing slash and letter case."""
+    return url.strip().strip("'\"").rstrip("/").lower()
+
+
 @dataclass
 class ClerkAuth:
     publishable_key: str | None = None
@@ -42,7 +47,7 @@ class ClerkAuth:
 
     @classmethod
     def from_env(cls) -> ClerkAuth:
-        parties = [p.strip() for p in os.environ.get("CLERK_AUTHORIZED_PARTIES", "").split(",") if p.strip()]
+        parties = [p for p in os.environ.get("CLERK_AUTHORIZED_PARTIES", "").split(",") if _origin(p)]
         return cls(publishable_key=os.environ.get("CLERK_PUBLISHABLE_KEY") or None,
                    jwks_url=os.environ.get("CLERK_JWKS_URL") or None,
                    authorized_parties=parties)
@@ -74,6 +79,8 @@ class ClerkAuth:
                                 leeway=10)
         except jwt.PyJWTError as exc:
             raise AuthError("Invalid or expired session") from exc
-        if self.authorized_parties and claims.get("azp") not in self.authorized_parties:
-            raise AuthError("Token issued for an unauthorized origin")
+        azp = _origin(claims.get("azp") or "")
+        if self.authorized_parties and azp not in {_origin(p) for p in self.authorized_parties}:
+            raise AuthError(f"Token issued for an unauthorized origin ({azp or 'none'}); "
+                            "add it to CLERK_AUTHORIZED_PARTIES")
         return claims["sub"]

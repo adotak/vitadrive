@@ -136,3 +136,13 @@ def test_api_flow(tmp_path):
     assert report["range"]["range_km"] > 0 and report["maintenance"]
     assert client.get("/api/vehicles/UNKNOWN/report").status_code == 404
     assert client.get("/").status_code == 200
+
+
+def test_installable_app_assets(tmp_path):
+    client = TestClient(create_app(str(tmp_path / "pwa.db")))
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200 and manifest.headers["content-type"].startswith("application/manifest+json")
+    for icon in manifest.json()["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+    assert client.get("/favicon.ico").headers["content-type"] == "image/png"
+    assert client.get("/nope").json() == {"detail": "Not Found"}
