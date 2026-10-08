@@ -9,9 +9,9 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from . import __version__
+from . import __version__, assistant
 from .auth import AuthError, ClerkAuth
 from .demo import DEMO_VEHICLES, seed_vehicle
 from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, ServiceRecord, Vehicle
@@ -50,6 +50,15 @@ class ConfigOut(BaseModel):
     auth_enabled: bool
     clerk_publishable_key: str | None
     clerk_frontend_api: str | None
+    assistant_enabled: bool = False
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+class AskOut(BaseModel):
+    answer: str
 
 
 def _default_db() -> str:
@@ -61,7 +70,7 @@ def _default_db() -> str:
     return "vitadrive.db"
 
 
-def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
+def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -> FastAPI:
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
     vd = VitaDrive(Store(db or _default_db()))
@@ -112,7 +121,8 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
     @app.get("/api/config", response_model=ConfigOut)
     def config():
         return ConfigOut(auth_enabled=auth.enabled, clerk_publishable_key=auth.publishable_key,
-                         clerk_frontend_api=auth.frontend_api)
+                         clerk_frontend_api=auth.frontend_api,
+                         assistant_enabled=llm is not None or assistant.enabled())
 
     @app.get("/api/health", include_in_schema=False)
     def health():
@@ -198,6 +208,16 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None) -> FastAPI:
     @app.get("/api/vehicles/{vin}/report", response_model=HealthReport)
     def report(vin: str = Depends(owned)):
         return guard(vd.report, vin)
+
+    @app.post("/api/vehicles/{vin}/ask", response_model=AskOut)
+    def ask(body: AskIn, vin: str = Depends(owned)):
+        if llm is None and not assistant.enabled():
+            raise HTTPException(503, "Ask VitaDrive is off: set OPENAI_API_KEY in the server environment")
+        rep = guard(vd.report, vin)
+        try:
+            return AskOut(answer=assistant.ask(rep, body.question, llm=llm))
+        except Exception as exc:  # provider errors (bad key, quota, timeout) shouldn't surface as a bare 500
+            raise HTTPException(502, f"AI provider error: {type(exc).__name__}") from None
 
     return app
 

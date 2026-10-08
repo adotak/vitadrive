@@ -22,6 +22,8 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **Threshold alerts** | Warning and critical limits per metric (low and/or high), filtered by powertrain (ICE / hybrid / EV). Safety-critical DTCs (misfire, ABS, airbag, HV system) are escalated. Alerts are de-duplicated, resolve automatically when a reading returns to normal, and can be dismissed. |
 | **Predictive maintenance** | 15 standard service items with distance *and* time intervals (whichever comes first). Distance limits are converted into calendar dates using the car's observed daily mileage. Wear items (brake pads, tires, oil life) use a regression of the sensor value vs. odometer to predict the exact date the limit will be hit. |
 | **Range estimate** | Remaining km from fuel/charge level using *learned* consumption from recent driving (refuel/recharge events ignored), falling back to rated consumption for new cars. |
+| **AI fault detector** | A small autoencoder trained with PyTorch on normal driving flags unusual *combinations* of live sensor values (e.g. one tire dropping while the others hold, a sagging 12V battery), often before any single threshold is crossed. The trained weights ship as JSON and run in plain Python, so the deployed app doesn't need PyTorch. |
+| **Ask VitaDrive** | Dashboard chat built with LangChain: ask "what needs attention on my car?" and it answers from that car's alerts, vitals, maintenance forecast, range and fault-detector result. Only the signed-in owner's car data is sent. Turned on by setting `OPENAI_API_KEY`. |
 | **Records** | Permanent log (Postgres in production, SQLite locally) of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
 | **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
 | **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. |
@@ -118,6 +120,13 @@ ruff check . && pytest
 # include the Postgres tests:
 docker run -d -e POSTGRES_PASSWORD=devpass -e POSTGRES_DB=vitadrive -p 5432:5432 postgres:16
 VITADRIVE_TEST_POSTGRES=postgresql://postgres:devpass@localhost:5432/vitadrive pytest
+```
+
+Retrain the fault detector (needs PyTorch, only for training):
+
+```bash
+pip install torch
+python scripts/train_anomaly.py   # rewrites vitadrive/anomaly_model.json
 ```
 
 ## Limitations

@@ -153,6 +153,18 @@
     <h2>Active alerts</h2>
     <div id="alerts"></div>
   </section>
+  <section class="card">
+    <h2>AI fault detector</h2>
+    <div id="anomaly" class="mute">No data</div>
+  </section>
+  <section class="card" id="askCard" hidden>
+    <h2>Ask VitaDrive</h2>
+    <form id="askForm" style="display:flex;gap:8px">
+      <input name="q" maxlength="500" required placeholder="What needs attention on my car?" style="flex:1;width:auto">
+      <button>Ask</button>
+    </form>
+    <div id="answer" style="white-space:pre-wrap;margin-top:10px"></div>
+  </section>
   <section class="card wide">
     <h2>Live vitals</h2>
     <div class="grid" id="vitals"></div>
@@ -202,6 +214,8 @@ const VITALS = [
   ["battery_12v_voltage","12V battery","V"],["hv_battery_soc_pct","HV charge","%"],["hv_battery_soh_pct","HV health","%"],
   ["hv_battery_temp_c","HV temp","°C"],["fuel_level_pct","Fuel","%"],["washer_fluid_level_pct","Washer fluid","%"],
 ];
+const EXTRA_LABELS = {engine_oil_pressure_kpa: "Oil pressure", transmission_fluid_temp_c: "Transmission temp"};
+const label = k => VITALS.find(([m]) => m === k)?.[1] || EXTRA_LABELS[k] || k;
 let vin = null;
 
 async function loadVehicles(select) {
@@ -234,6 +248,7 @@ function startHeroVideo() {
 async function boot() {
   const cfg = await fetch("/api/config").then(r => r.json());
   authEnabled = cfg.auth_enabled;
+  $("#askCard").hidden = !cfg.assistant_enabled;
   if (authEnabled) {
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -271,6 +286,10 @@ async function refresh() {
   $("#range").innerHTML = r ? `<div class="big" style="color:var(--${r.status})">${Math.round(r.range_km)} km</div>
     <div class="mute">${r.level_pct}% ${r.energy_source} · ${r.consumption_per_100km}/100km · ${esc(r.consumption_basis)}</div>
     <div class="bar"><div style="width:${r.level_pct}%;background:var(--${r.status})"></div></div>` : "No data";
+  const an = rep.anomaly, scoreLine = an ? `<div class="mute">pattern score ${an.score} (normal below ${an.threshold})</div>` : "";
+  $("#anomaly").innerHTML = !an ? `<span class="mute">This car reports too few live sensors to check</span>`
+    : an.anomalous ? `${badge("info")} Unusual sensor pattern: ${an.top_features.map(k => esc(label(k))).join(", ")}${scoreLine}`
+    : `<span style="color:var(--ok)">Readings look normal</span>${scoreLine}`;
   $("#alerts").innerHTML = rep.active_alerts.length ? rep.active_alerts.map(a =>
     `<div style="margin-bottom:8px">${badge(a.severity)} ${esc(a.message)} <button class="ghost" onclick="ack(${a.id})">Dismiss</button></div>`).join("")
     : `<span class="mute">All systems normal</span>`;
@@ -289,7 +308,16 @@ async function refresh() {
 
 window.ack = async id => { await api(`/api/alerts/${id}/ack`, {method: "POST"}); refresh(); };
 window.prefill = item => { $("#svcItem").value = item; $("#svcForm").scrollIntoView({behavior: "smooth"}); };
-$("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); refresh(); };
+$("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); $("#answer").textContent = ""; refresh(); };
+$("#askForm").onsubmit = async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button"), out = $("#answer");
+  btn.disabled = true; out.className = "mute"; out.textContent = "Thinking…";
+  try {
+    const {answer} = await api(`/api/vehicles/${vin}/ask`, {method: "POST", body: JSON.stringify({question: e.target.q.value})});
+    out.className = ""; out.textContent = answer;
+  } catch (err) { out.textContent = err.message; } finally { btn.disabled = false; }
+};
 $("#svcForm").onsubmit = async e => {
   e.preventDefault();
   const body = Object.fromEntries([...new FormData(e.target)].filter(([, v]) => v !== ""));

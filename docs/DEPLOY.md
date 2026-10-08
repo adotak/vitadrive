@@ -42,6 +42,19 @@ Each push to `main` redeploys automatically, and pull requests get preview URLs.
 
 Development instances (`pk_test_`) show a "Development mode" badge. When you're ready, create a **production instance** in Clerk. It requires your own domain: add the domain in Vercel and follow the DNS records Clerk asks for. Then replace `CLERK_PUBLISHABLE_KEY` with the `pk_live_` key and redeploy.
 
+### Turning on "Ask VitaDrive" (optional AI chat)
+
+The chat uses OpenAI through LangChain. Without a key the chat box is hidden and everything else works.
+
+1. Go to https://platform.openai.com/api-keys, sign in, and click **Create new secret key**. Copy it (it starts with `sk-`).
+2. Add a payment method under **Settings → Billing**. OpenAI charges per question; with the default model each question costs a fraction of a cent.
+3. In Vercel, open **Settings → Environment Variables** and add `OPENAI_API_KEY` with that key. Optionally add `OPENAI_MODEL` (default `gpt-4o-mini`).
+4. Go to **Deployments**, open the **⋯** menu on the latest deployment and click **Redeploy**.
+
+Keep the key only in Vercel. Never commit it or paste it into chats.
+
+The AI fault detector needs no setup: its trained model is part of the code.
+
 ## 4. Connecting a car
 
 1. In the dashboard, register the vehicle (or pick it) and click **API key**. Copy the key, because it's shown only once.
@@ -69,4 +82,5 @@ If `CLERK_PUBLISHABLE_KEY` is unset, login is disabled and everything belongs to
 
 - Each free tier has usage limits; check the current pricing pages.
 - Supabase pauses free projects after a period of inactivity. Unpause them from the dashboard, or upgrade.
+- OpenAI bills each chat question to your OpenAI account (only if `OPENAI_API_KEY` is set).
 - Vercel function duration is capped by plan; the default covers **Add demo cars**.
