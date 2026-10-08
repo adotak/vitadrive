@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from .anomaly import AnomalyResult
+from .anomaly import score as anomaly_score
 from .maintenance import MaintenancePlanner
 from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, Severity, Vehicle
 from .monitor import HealthMonitor, overall_status
@@ -24,6 +26,7 @@ class HealthReport(BaseModel):
     active_alerts: list[Alert]
     maintenance: list[MaintenanceForecast]
     range: Optional[RangeEstimate]
+    anomaly: Optional[AnomalyResult] = None
 
 
 class VitaDrive:
@@ -80,7 +83,11 @@ class VitaDrive:
         statuses = [overall_status(current + active)] + [m.status for m in maintenance]
         if rng:
             statuses.append(rng.status)
+        detected = anomaly_score(latest) if latest else None
+        if detected and detected.anomalous:
+            statuses.append(Severity.INFO)
         order = [Severity.OK, Severity.INFO, Severity.WARNING, Severity.CRITICAL]
         status = max(statuses, key=order.index)
         return HealthReport(vehicle=vehicle, status=status, latest_reading=latest,
-                            active_alerts=active, maintenance=maintenance, range=rng)
+                            active_alerts=active, maintenance=maintenance, range=rng,
+                            anomaly=detected)

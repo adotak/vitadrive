@@ -95,7 +95,8 @@ def test_api_isolation_between_users_and_api_keys(tmp_path, clerk):
     assert len(demo) == 2
     assert {v["vin"] for v in client.get("/api/vehicles", headers=bob).json()} == {v["vin"] for v in demo}
     assert client.get("/api/config").json() == {"auth_enabled": True, "clerk_publishable_key": PK,
-                                                "clerk_frontend_api": "clerk.example.com"}
+                                                "clerk_frontend_api": "clerk.example.com",
+                                                "assistant_enabled": False}
     assert client.delete(f"/api/vehicles/{car['vin']}", headers=alice).status_code == 204
     assert client.get("/api/vehicles", headers=alice).json() == []
 

@@ -16,10 +16,13 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.1",
     "pyjwt[crypto]>=2.8",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.3",
 ]
 
 [project.optional-dependencies]
 obd = ["obd>=0.7.1"]
+train = ["torch>=2.2"]
 dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.4"]
 
 [project.scripts]
@@ -29,7 +32,7 @@ vitadrive = "vitadrive.cli:main"
 include = ["vitadrive*"]
 
 [tool.setuptools.package-data]
-vitadrive = ["static/*", "static/img/*", "static/media/*"]
+vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*"]
 
 [tool.ruff]
 line-length = 120
