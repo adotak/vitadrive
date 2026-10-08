@@ -74,5 +74,6 @@ def score(reading: SensorReading, model: Optional[dict] = None) -> Optional[Anom
     threshold = model["threshold"]
     anomalous = s > threshold
     ranked = sorted(zip(errors, FEATURES, strict=True), reverse=True)
-    top = [name for err, name in ranked[:3] if err > threshold] if anomalous else []
+    # Correlated sensors share some error; only name those carrying a real share of it.
+    top = [name for err, name in ranked[:3] if err >= ranked[0][0] / 4] if anomalous else []
     return AnomalyResult(score=round(s, 4), threshold=threshold, anomalous=anomalous, top_features=top)
