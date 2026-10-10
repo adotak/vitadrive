@@ -17,30 +17,75 @@
   * { box-sizing:border-box; }
   [hidden] { display:none !important; }
   body { margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-  header { display:flex; align-items:center; gap:16px; padding:14px 24px; border-bottom:1px solid var(--line); }
-  header h1 { font-size:18px; margin:0; letter-spacing:.5px; }
+  header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:12px; padding:12px 28px;
+    background:#0e1116e6; backdrop-filter:blur(12px); border-bottom:1px solid var(--line); }
+  header h1 { font-size:19px; margin:0 8px 0 0; letter-spacing:.3px; }
   header h1 span { color:var(--ok); }
-  select { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
-  main { padding:20px 24px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
-  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--mute); margin:0 0 12px; }
-  .wide { grid-column:1/-1; }
-  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; }
+  select { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:7px 14px; font:inherit; }
+  main { max-width:1240px; margin:0 auto; padding:24px 28px 56px; display:grid; gap:18px; grid-template-columns:repeat(12,1fr); }
+  .card { background:linear-gradient(180deg,#171c24,#12161d); border:1px solid var(--line); border-radius:16px; padding:20px 22px;
+    grid-column:span 6; min-width:0; }
+  .span-7 { grid-column:span 7; } .span-5 { grid-column:span 5; } .wide { grid-column:1/-1; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--mute); margin:0 0 14px; font-weight:600; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; text-transform:capitalize; }
   .ok{background:#3fb95022;color:var(--ok)} .info{background:#58a6ff22;color:var(--info)}
   .warning{background:#d2992222;color:var(--warning)} .critical{background:#f8514922;color:var(--critical)}
-  .big { font-size:34px; font-weight:700; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
-  .metric { border:1px solid var(--line); border-radius:8px; padding:10px; }
-  .metric .k { color:var(--mute); font-size:12px; } .metric .v { font-size:18px; font-weight:600; }
-  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); }
+  .dot { width:9px; height:9px; border-radius:50%; flex:none; background:var(--c,var(--ok)); box-shadow:0 0 8px var(--c,var(--ok)); }
+  .mute { color:var(--mute); } .small { font-size:12px; }
+  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:9px 6px; border-bottom:1px solid #222832; }
   th { color:var(--mute); font-weight:500; font-size:12px; }
-  button { background:#238636; color:#fff; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; }
+  button { background:#238636; color:#fff; border:0; border-radius:8px; padding:7px 14px; cursor:pointer; font:inherit; }
   button.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
+  button.link { background:none; border:0; color:var(--info); padding:6px 0; }
+  button:disabled { opacity:.6; cursor:default; }
   form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  input { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; width:130px; }
-  .mute { color:var(--mute); }
-  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
-  .bar > div { height:100%; }
+  input { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 10px; width:130px; font:inherit; }
+  .hero-card { display:flex; align-items:center; justify-content:space-between; gap:28px; padding:26px 28px; }
+  .hero-main { display:flex; align-items:center; gap:22px; min-width:0; }
+  .ring { width:86px; height:86px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:36px; font-weight:700;
+    color:var(--c); border:3px solid var(--c); box-shadow:0 0 34px -8px var(--c), inset 0 0 24px -12px var(--c); }
+  .car { color:var(--mute); font-size:13px; }
+  .headline { font-size:30px; font-weight:700; letter-spacing:-.5px; margin:2px 0 4px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .chip { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; background:#ffffff0a;
+    border:1px solid var(--line); font-size:12px; color:#c9d1d9; }
+  button.chip { cursor:pointer; }
+  .gauge-wrap { position:relative; width:132px; height:132px; flex:none; text-align:center; }
+  .gauge { width:132px; height:132px; transform:rotate(-90deg); }
+  .gauge circle { fill:none; stroke-width:9; stroke-linecap:round; } .gauge .track { stroke:#222832; }
+  .gauge-label { position:absolute; inset:0; display:grid; place-content:center; }
+  .gauge-label b { font-size:28px; line-height:1; } .gauge-label span { font-size:11px; color:var(--mute); }
+  .range-note { text-align:center; margin-top:6px; }
+  .issue { border-bottom:1px solid #222832; } .issue:last-child { border-bottom:0; }
+  .issue summary { list-style:none; display:flex; align-items:center; gap:12px; padding:11px 2px; cursor:pointer; }
+  .issue summary::-webkit-details-marker { display:none; }
+  .issue summary .t { flex:1; font-weight:500; } .issue summary::after { content:"›"; color:var(--mute); font-size:18px; transition:transform .2s; }
+  .issue[open] summary::after { transform:rotate(90deg); }
+  .issue .body { padding:0 2px 12px 21px; color:#c9d1d9; display:flex; gap:12px; align-items:flex-start; justify-content:space-between; }
+  .allgood { display:flex; align-items:center; gap:12px; padding:8px 0; color:#c9d1d9; }
+  .systems { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+  .sys { border:1px solid #222832; border-radius:12px; padding:14px 16px; background:#0e111666; }
+  .sys-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:600; }
+  .sys-head .state { margin-left:auto; font-size:12px; font-weight:500; color:var(--c); }
+  .row { display:flex; justify-content:space-between; gap:8px; padding:4px 0; font-size:13px; }
+  .row .v { font-weight:600; font-variant-numeric:tabular-nums; } .row .v small { color:var(--mute); font-weight:400; }
+  .tires { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+  .tire { border:1px solid #222832; border-radius:10px; padding:6px 10px; }
+  .tire b { display:block; font-variant-numeric:tabular-nums; } .tire b small { color:var(--mute); font-weight:400; }
+  .svc { display:flex; align-items:center; gap:14px; padding:11px 2px; border-bottom:1px solid #222832; }
+  .svc .t { flex:1; min-width:0; } .svc .t div:first-child { font-weight:500; }
+  [data-collapsed] .extra { display:none; }
+  details.logsvc { margin-top:14px; } details.logsvc summary { cursor:pointer; color:var(--info); }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; }
+  .tabs button { background:transparent; color:var(--mute); border:1px solid transparent; padding:5px 12px; border-radius:999px; }
+  .tabs button.on { color:var(--fg); border-color:var(--line); background:#ffffff0a; }
+  #answer { margin-top:12px; line-height:1.55; }
+  @media (max-width:900px) {
+    header { padding:10px 14px; flex-wrap:wrap; } main { padding:16px 12px 40px; gap:14px; }
+    .card, .span-7, .span-5 { grid-column:1/-1; } .hero-card { flex-direction:column; align-items:flex-start; }
+    .gauge-wrap { align-self:center; } .headline { font-size:24px; } .hide-sm { display:none; }
+    header select { order:5; flex:1 1 100%; } header > span { display:none; } header h1 { margin-right:auto; }
+    .ring { width:60px; height:60px; font-size:26px; } .hero-main { gap:16px; } }
   #landing { position:relative; min-height:100vh; }
   #landing .hero { position:relative; min-height:100vh; display:grid; grid-template-columns:1.1fr 1fr; align-items:center;
     gap:48px; padding:48px 6vw; overflow:hidden; }
@@ -73,9 +118,7 @@
 <body>
 <header>
   <h1>Vita<span>Drive</span></h1>
-  <select id="vehicle"></select>
-  <span id="status"></span>
-  <span class="mute" id="odo"></span>
+  <select id="vehicle" aria-label="Vehicle"></select>
   <span style="flex:1"></span>
   <button class="ghost" id="apiKeyBtn" hidden>API key</button>
   <button class="ghost" id="demoBtn">Add demo cars</button>
@@ -145,52 +188,59 @@
   </form>
 </section>
 <main id="main" hidden>
-  <section class="card">
-    <h2>Estimated range</h2>
-    <div id="range" class="mute">No data</div>
+  <section class="card wide hero-card">
+    <div class="hero-main">
+      <div class="ring" id="statusRing"></div>
+      <div>
+        <div class="car" id="carName"></div>
+        <div class="headline" id="status"></div>
+        <div class="mute" id="summary"></div>
+        <div class="chips"><span class="chip" id="odo"></span><span class="chip" id="aiCheck" hidden></span></div>
+      </div>
+    </div>
+    <div id="range"></div>
   </section>
-  <section class="card">
-    <h2>Active alerts</h2>
+  <section class="card span-7" id="attention">
+    <h2>Needs attention</h2>
     <div id="alerts"></div>
   </section>
-  <section class="card">
-    <h2>AI fault detector</h2>
-    <div id="anomaly" class="mute">No data</div>
-  </section>
-  <section class="card" id="askCard" hidden>
+  <section class="card span-5" id="askCard" hidden>
     <h2>Ask VitaDrive</h2>
-    <form id="askForm" style="display:flex;gap:8px">
-      <input name="q" maxlength="500" required placeholder="What needs attention on my car?" style="flex:1;width:auto">
+    <form id="askForm" style="display:flex;gap:8px;margin:0">
+      <input name="q" maxlength="500" required placeholder="Ask anything about this car" style="flex:1;width:auto">
       <button>Ask</button>
     </form>
-    <div id="answer" style="white-space:pre-wrap;margin-top:10px"></div>
+    <div class="chips" id="askChips">
+      <button type="button" class="chip">What needs attention?</button>
+      <button type="button" class="chip">When is my next service?</button>
+      <button type="button" class="chip">Is it safe for a long trip?</button>
+    </div>
+    <div id="answer"></div>
   </section>
   <section class="card wide">
-    <h2>Live vitals</h2>
-    <div class="grid" id="vitals"></div>
+    <h2>Systems</h2>
+    <div class="systems" id="vitals"></div>
   </section>
-  <section class="card wide">
-    <h2>Maintenance forecast</h2>
-    <table><thead><tr><th>Item</th><th>Status</th><th>Due date</th><th>Days left</th><th>Km left</th><th>Last service</th><th>Basis</th><th></th></tr></thead>
-      <tbody id="maint"></tbody></table>
+  <section class="card span-7">
+    <h2>Upcoming maintenance</h2>
+    <div id="maint"></div>
+    <details class="logsvc" id="logSvc"><summary>Log a service</summary>
+      <form id="svcForm">
+        <select name="item" id="svcItem"></select>
+        <input name="performed_on" type="date" required>
+        <input name="odometer_km" type="number" step="0.1" placeholder="Odometer km" required>
+        <input name="cost" type="number" step="0.01" placeholder="Cost">
+        <input name="shop" placeholder="Shop">
+        <input name="notes" placeholder="Notes" style="width:200px">
+        <button>Save</button>
+      </form>
+    </details>
   </section>
-  <section class="card wide">
-    <h2>Service history</h2>
-    <table><thead><tr><th>Date</th><th>Item</th><th>Odometer</th><th>Cost</th><th>Shop</th><th>Notes</th></tr></thead>
-      <tbody id="services"></tbody></table>
-    <form id="svcForm">
-      <select name="item" id="svcItem"></select>
-      <input name="performed_on" type="date" required>
-      <input name="odometer_km" type="number" step="0.1" placeholder="Odometer km" required>
-      <input name="cost" type="number" step="0.01" placeholder="Cost">
-      <input name="shop" placeholder="Shop">
-      <input name="notes" placeholder="Notes" style="width:200px">
-      <button>Log service</button>
-    </form>
-  </section>
-  <section class="card wide">
-    <h2>Alert log</h2>
-    <table><thead><tr><th>Time</th><th>Severity</th><th>Message</th><th>State</th></tr></thead><tbody id="log"></tbody></table>
+  <section class="card span-5">
+    <h2>History</h2>
+    <div class="tabs"><button class="on" data-tab="services">Services</button><button data-tab="log">Alert log</button></div>
+    <div id="services"></div>
+    <div id="log" hidden></div>
   </section>
 </main>
 <script>
@@ -207,25 +257,59 @@ async function api(path, opts = {}) {
   return r.status === 204 ? null : r.json();
 }
 const VITALS = [
-  ["engine_oil_level_pct","Oil level","%"],["engine_oil_life_pct","Oil life","%"],["coolant_temp_c","Coolant temp","°C"],
-  ["coolant_level_pct","Coolant level","%"],["brake_fluid_level_pct","Brake fluid","%"],["brake_pad_front_mm","Front pads","mm"],
-  ["brake_pad_rear_mm","Rear pads","mm"],["tire_pressure_fl_kpa","Tire FL","kPa"],["tire_pressure_fr_kpa","Tire FR","kPa"],
-  ["tire_pressure_rl_kpa","Tire RL","kPa"],["tire_pressure_rr_kpa","Tire RR","kPa"],["tire_tread_mm","Tread","mm"],
+  ["engine_oil_level_pct","Oil level","%"],["engine_oil_life_pct","Oil life","%"],["engine_oil_pressure_kpa","Oil pressure","kPa"],
+  ["coolant_temp_c","Coolant temp","°C"],["coolant_level_pct","Coolant level","%"],["transmission_fluid_temp_c","Transmission temp","°C"],
+  ["washer_fluid_level_pct","Washer fluid","%"],["brake_fluid_level_pct","Brake fluid","%"],["brake_pad_front_mm","Front pads","mm"],
+  ["brake_pad_rear_mm","Rear pads","mm"],["tire_pressure_fl_kpa","Front left","kPa"],["tire_pressure_fr_kpa","Front right","kPa"],
+  ["tire_pressure_rl_kpa","Rear left","kPa"],["tire_pressure_rr_kpa","Rear right","kPa"],["tire_tread_mm","Tread depth","mm"],
   ["battery_12v_voltage","12V battery","V"],["hv_battery_soc_pct","HV charge","%"],["hv_battery_soh_pct","HV health","%"],
-  ["hv_battery_temp_c","HV temp","°C"],["fuel_level_pct","Fuel","%"],["washer_fluid_level_pct","Washer fluid","%"],
+  ["hv_battery_temp_c","HV temp","°C"],["fuel_level_pct","Fuel","%"],
 ];
-const EXTRA_LABELS = {engine_oil_pressure_kpa: "Oil pressure", transmission_fluid_temp_c: "Transmission temp"};
-const label = k => VITALS.find(([m]) => m === k)?.[1] || EXTRA_LABELS[k] || k;
+const SYSTEMS = [
+  ["Engine & fluids", ["engine_oil_level_pct","engine_oil_life_pct","engine_oil_pressure_kpa","coolant_temp_c","coolant_level_pct",
+    "transmission_fluid_temp_c","washer_fluid_level_pct"]],
+  ["Brakes", ["brake_fluid_level_pct","brake_pad_front_mm","brake_pad_rear_mm"]],
+  ["Tires", ["tire_pressure_fl_kpa","tire_pressure_fr_kpa","tire_pressure_rl_kpa","tire_pressure_rr_kpa","tire_tread_mm"]],
+  ["Battery & energy", ["battery_12v_voltage","hv_battery_soc_pct","hv_battery_soh_pct","hv_battery_temp_c","fuel_level_pct"]],
+];
+const SEV = ["ok", "info", "warning", "critical"];
+const worst = list => list.reduce((a, b) => SEV.indexOf(b) > SEV.indexOf(a) ? b : a, "ok");
+const HEADLINE = {ok: "All good", info: "Looking good", warning: "Check soon", critical: "Needs attention"};
+const GLYPH = {ok: "✓", info: "✓", warning: "!", critical: "!"};
+const STATE = {ok: "Good", info: "Good", warning: "Check", critical: "Act now"};
+const label = k => VITALS.find(([m]) => m === k)?.[1] || k;
+const fmtDate = d => new Date(d + "T00:00:00").toLocaleDateString(undefined, {day: "numeric", month: "short", year: "numeric"});
+const dueText = m => m.days_remaining < 0 ? `overdue by ${-m.days_remaining} days` : m.days_remaining === 0 ? "due today"
+  : `in ${m.days_remaining} days`;
+const expanded = new Set();
+function collapsible(id, rows, n, noun) {
+  const el = $("#" + id), open = expanded.has(id);
+  el.innerHTML = rows.map((r, i) => i < n ? r : r.replace(/^<(\w+) class="/, '<$1 class="extra ').replace(/^<(\w+)>/, '<$1 class="extra">')).join("")
+    + (rows.length > n ? `<button class="link" onclick="toggleMore('${id}')">${open ? "Show less" : `Show all ${rows.length} ${noun}`}</button>` : "");
+  open ? el.removeAttribute("data-collapsed") : el.setAttribute("data-collapsed", "");
+}
+window.toggleMore = id => { expanded.has(id) ? expanded.delete(id) : expanded.add(id); refresh(); };
+function issueGroups(alerts) {
+  const dtc = alerts.filter(a => a.metric === "dtc");
+  const groups = alerts.filter(a => a.metric !== "dtc").map(a => ({sev: a.severity, title: a.label, detail: a.message, ids: [a.id]}));
+  if (dtc.length) {
+    const codes = [...new Set(dtc.map(a => a.value))];
+    groups.push({sev: worst(dtc.map(a => a.severity)), ids: dtc.map(a => a.id),
+      title: codes.length === 1 ? `Fault code ${codes[0]}` : `${codes.length} fault codes reported`,
+      detail: `${codes.join(", ")}. Have the car scanned by a mechanic.`});
+  }
+  return groups.sort((a, b) => SEV.indexOf(b.sev) - SEV.indexOf(a.sev));
+}
 let vin = null;
 
 async function loadVehicles(select) {
   const vs = await api("/api/vehicles");
-  $("#vehicle").innerHTML = vs.map(v => `<option value="${esc(v.vin)}">${esc(v.year)} ${esc(v.make)} ${esc(v.model)} — ${esc(v.vin)}</option>`).join("");
+  $("#vehicle").innerHTML = vs.map(v => `<option value="${esc(v.vin)}">${esc(v.year)} ${esc(v.make)} ${esc(v.model)} · …${esc(v.vin.slice(-4))}</option>`).join("");
   vin = vs.find(v => v.vin === select)?.vin || vs[0]?.vin;
   $("#vehicle").value = vin || "";
   $("#main").hidden = $("#vehicle").hidden = $("#apiKeyBtn").hidden = !vin;
   $("#empty").hidden = !!vin;
-  if (vin) refresh(); else { $("#status").innerHTML = ""; $("#odo").textContent = ""; }
+  if (vin) refresh();
 }
 
 function startHeroVideo() {
@@ -249,6 +333,7 @@ async function boot() {
   const cfg = await fetch("/api/config").then(r => r.json());
   authEnabled = cfg.auth_enabled;
   $("#askCard").hidden = !cfg.assistant_enabled;
+  $("#attention").classList.toggle("wide", !cfg.assistant_enabled);
   if (authEnabled) {
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -274,40 +359,74 @@ async function boot() {
 async function refresh() {
   const [rep, services, log] = await Promise.all([
     api(`/api/vehicles/${vin}/report`), api(`/api/vehicles/${vin}/services`), api(`/api/vehicles/${vin}/alerts?limit=50`)]);
-  $("#status").innerHTML = badge(rep.status);
-  const lr = rep.latest_reading;
-  $("#odo").textContent = lr ? `${Math.round(lr.odometer_km).toLocaleString()} km · updated ${new Date(lr.timestamp).toLocaleString()}` : "";
+  const v = rep.vehicle, lr = rep.latest_reading, groups = issueGroups(rep.active_alerts);
+  const upcoming = [...rep.maintenance].sort((a, b) => a.days_remaining - b.days_remaining), next = upcoming[0];
+  $("#statusRing").style.setProperty("--c", `var(--${rep.status})`);
+  $("#statusRing").textContent = GLYPH[rep.status];
+  $("#carName").textContent = `${v.year} ${v.make} ${v.model}`;
+  $("#status").textContent = HEADLINE[rep.status];
+  $("#status").style.color = `var(--${rep.status})`;
+  $("#summary").textContent = [groups.length ? `${groups.length} ${groups.length === 1 ? "item needs" : "items need"} attention` : "No warnings",
+    next && `next service: ${next.label.toLowerCase()} ${dueText(next)}`].filter(Boolean).join(" · ");
+  $("#odo").textContent = lr ? `${Math.round(lr.odometer_km).toLocaleString()} km · updated ${new Date(lr.timestamp).toLocaleDateString()}` : "No readings yet";
+  const an = rep.anomaly;
+  $("#aiCheck").hidden = !an;
+  if (an) {
+    $("#aiCheck").innerHTML = `<span class="dot" style="--c:var(--${an.anomalous ? "info" : "ok"})"></span>AI check: ${an.anomalous
+      ? `unusual ${an.top_features.map(k => esc(label(k).toLowerCase())).join(", ")} reading` : "normal"}`;
+    $("#aiCheck").title = `Learned fault detector score ${an.score} (normal below ${an.threshold})`;
+  }
+  const r = rep.range, C = 2 * Math.PI * 52;
+  $("#range").innerHTML = r ? `<div class="gauge-wrap" title="${esc(r.consumption_basis)}">
+      <svg class="gauge" viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/>
+      <circle cx="60" cy="60" r="52" style="stroke:var(--${r.status});stroke-dasharray:${C * r.level_pct / 100} ${C}"/></svg>
+      <div class="gauge-label"><b>${Math.round(r.range_km)}</b><span>km range</span></div></div>
+    <div class="range-note mute small">${Math.round(r.level_pct)}% ${esc(r.energy_source)}</div>` : "";
+
+  $("#alerts").innerHTML = groups.length ? "" : `<div class="allgood"><span class="dot"></span>Nothing needs your attention right now.</div>`;
+  if (groups.length) collapsible("alerts", groups.map(g => `<details class="issue"><summary><span class="dot" style="--c:var(--${g.sev})"></span>
+    <span class="t">${esc(g.title)}</span><span class="badge ${g.sev}">${g.sev}</span></summary>
+    <div class="body"><span>${esc(g.detail)}</span><button class="ghost small" onclick="dismiss([${g.ids.join(",")}])">Dismiss</button></div></details>`),
+    4, "items");
+
   const alertMetrics = new Map(rep.active_alerts.map(a => [a.metric, a.severity]));
-  $("#vitals").innerHTML = VITALS.filter(([k]) => lr && lr[k] != null).map(([k, l, u]) => {
-    const s = alertMetrics.get(k) || "ok";
-    return `<div class="metric"><div class="k">${l}</div><div class="v" style="color:var(--${s})">${lr[k]} <span class="mute" style="font-size:12px">${u}</span></div></div>`;
-  }).join("") + (lr?.dtc_codes?.length ? `<div class="metric"><div class="k">DTC codes</div><div class="v" style="color:var(--warning)">${lr.dtc_codes.map(esc).join(", ")}</div></div>` : "");
-  const r = rep.range;
-  $("#range").innerHTML = r ? `<div class="big" style="color:var(--${r.status})">${Math.round(r.range_km)} km</div>
-    <div class="mute">${r.level_pct}% ${r.energy_source} · ${r.consumption_per_100km}/100km · ${esc(r.consumption_basis)}</div>
-    <div class="bar"><div style="width:${r.level_pct}%;background:var(--${r.status})"></div></div>` : "No data";
-  const an = rep.anomaly, scoreLine = an ? `<div class="mute">pattern score ${an.score} (normal below ${an.threshold})</div>` : "";
-  $("#anomaly").innerHTML = !an ? `<span class="mute">This car reports too few live sensors to check</span>`
-    : an.anomalous ? `${badge("info")} Unusual sensor pattern: ${an.top_features.map(k => esc(label(k))).join(", ")}${scoreLine}`
-    : `<span style="color:var(--ok)">Readings look normal</span>${scoreLine}`;
-  $("#alerts").innerHTML = rep.active_alerts.length ? rep.active_alerts.map(a =>
-    `<div style="margin-bottom:8px">${badge(a.severity)} ${esc(a.message)} <button class="ghost" onclick="ack(${a.id})">Dismiss</button></div>`).join("")
-    : `<span class="mute">All systems normal</span>`;
-  $("#maint").innerHTML = rep.maintenance.map(m => `<tr><td>${esc(m.label)}</td><td>${badge(m.status)}</td><td>${m.due_date}</td>
-    <td>${m.days_remaining}</td><td>${m.km_remaining == null ? "—" : Math.round(m.km_remaining).toLocaleString()}</td>
-    <td>${m.last_service_date ? `${m.last_service_date} @ ${Math.round(m.last_service_km).toLocaleString()} km` : "—"}</td>
-    <td class="mute">${esc(m.reason)}</td><td><button class="ghost" onclick="prefill('${m.item}')">Log</button></td></tr>`).join("");
+  const row = k => { const s = alertMetrics.get(k) || "ok", u = VITALS.find(([m]) => m === k)[2];
+    return `<div class="row"><span class="mute">${label(k)}</span><span class="v" ${s !== "ok" ? `style="color:var(--${s})"` : ""}>${lr[k]} <small>${u}</small></span></div>`; };
+  $("#vitals").innerHTML = lr ? SYSTEMS.map(([name, keys]) => {
+    const present = keys.filter(k => lr[k] != null);
+    if (!present.length) return "";
+    const s = worst(present.map(k => alertMetrics.get(k) || "ok").concat(name === "Engine & fluids" && lr.dtc_codes.length ? ["warning"] : []));
+    const tires = present.filter(k => k.startsWith("tire_pressure"));
+    const tire = k => { const s = alertMetrics.get(k) || "ok";
+      return `<div class="tire"><span class="mute small">${label(k)}</span><b ${s !== "ok" ? `style="color:var(--${s})"` : ""}>${lr[k]} <small>kPa</small></b></div>`; };
+    const body = name === "Tires" ? `<div class="tires">${tires.map(tire).join("")}</div>${present.filter(k => !tires.includes(k)).map(row).join("")}`
+      : present.map(row).join("");
+    return `<div class="sys" style="--c:var(--${s})"><div class="sys-head"><span class="dot"></span>${name}<span class="state">${STATE[s]}</span></div>${body}</div>`;
+  }).join("") : `<span class="mute">No readings yet. Send one with the car's API key.</span>`;
+
+  collapsible("maint", upcoming.map(m => `<div class="svc"><span class="dot" style="--c:var(--${m.status})"></span><div class="t">
+    <div>${esc(m.label)}</div><div class="mute small" title="${esc(m.reason)}">${fmtDate(m.due_date)} · ${dueText(m)}${m.km_remaining == null ? ""
+    : ` · ${Math.max(0, Math.round(m.km_remaining)).toLocaleString()} km left`}</div></div>
+    <button class="ghost small hide-sm" onclick="prefill('${m.item}')">Log</button></div>`), 5, "items");
   $("#svcItem").innerHTML = rep.maintenance.map(m => `<option value="${m.item}">${esc(m.label)}</option>`).join("");
-  $("#services").innerHTML = services.map(s => `<tr><td>${s.performed_on}</td><td>${esc(s.item)}</td>
-    <td>${Math.round(s.odometer_km).toLocaleString()}</td><td>${s.cost ?? "—"}</td><td>${esc(s.shop) || "—"}</td><td>${esc(s.notes)}</td></tr>`).join("")
-    || `<tr><td colspan="6" class="mute">No services recorded yet</td></tr>`;
-  $("#log").innerHTML = log.map(a => `<tr><td>${new Date(a.timestamp).toLocaleString()}</td><td>${badge(a.severity)}</td>
-    <td>${esc(a.message)}</td><td class="mute">${a.acknowledged ? "resolved" : "open"}</td></tr>`).join("");
+  collapsible("services", services.map(s => `<div class="svc"><div class="t"><div>${esc(rep.maintenance.find(m => m.item === s.item)?.label || s.item)}</div>
+    <div class="mute small">${fmtDate(s.performed_on)} · ${Math.round(s.odometer_km).toLocaleString()} km${s.shop ? ` · ${esc(s.shop)}` : ""}${s.notes ? ` · ${esc(s.notes)}` : ""}</div></div>
+    <span class="mute">${s.cost ?? ""}</span></div>`), 6, "services");
+  if (!services.length) $("#services").innerHTML = `<span class="mute">No services recorded yet.</span>`;
+  collapsible("log", log.map(a => `<div class="svc"><span class="dot" style="--c:var(--${a.acknowledged ? "line" : a.severity})"></span><div class="t">
+    <div>${esc(a.label)}${a.metric === "dtc" ? ` ${esc(a.value)}` : ""}</div><div class="mute small">${new Date(a.timestamp).toLocaleString()} · ${a.acknowledged ? "resolved" : "open"}</div></div></div>`),
+    6, "alerts");
+  if (!log.length) $("#log").innerHTML = `<span class="mute">No alerts yet.</span>`;
   if (lr) { const f = $("#svcForm"); f.odometer_km.value ||= Math.round(lr.odometer_km); f.performed_on.value ||= new Date().toISOString().slice(0, 10); }
 }
 
-window.ack = async id => { await api(`/api/alerts/${id}/ack`, {method: "POST"}); refresh(); };
-window.prefill = item => { $("#svcItem").value = item; $("#svcForm").scrollIntoView({behavior: "smooth"}); };
+window.dismiss = async ids => { for (const id of ids) await api(`/api/alerts/${id}/ack`, {method: "POST"}); refresh(); };
+window.prefill = item => { $("#svcItem").value = item; $("#logSvc").open = true; $("#svcForm").scrollIntoView({behavior: "smooth", block: "center"}); };
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("#services").hidden = b.dataset.tab !== "services"; $("#log").hidden = b.dataset.tab !== "log";
+});
+$("#askChips").onclick = e => { if (e.target.matches("button")) { $("#askForm").q.value = e.target.textContent; $("#askForm").requestSubmit(); } };
 $("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); $("#answer").textContent = ""; refresh(); };
 $("#askForm").onsubmit = async e => {
   e.preventDefault();
