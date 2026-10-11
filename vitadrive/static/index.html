@@ -113,6 +113,29 @@
   @media (max-width:900px) { #landing .hero { grid-template-columns:1fr; } #landing .brand { margin-bottom:24px; }
     .gallery { grid-template-columns:1fr 1fr; } }
   @media (max-width:560px) { .gallery { grid-template-columns:1fr; } }
+  .near-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; }
+  .near-top .chips { margin-top:0; }
+  .near-loc { display:flex; gap:8px; margin:0; } .near-loc input { width:170px; }
+  .chip.kind { cursor:pointer; } .chip.kind:hover { border-color:#3d4652; }
+  .chip.kind.on { border-color:var(--ok); color:var(--fg); background:#3fb9501a; }
+  .chip.kind.need::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--warning); box-shadow:0 0 6px var(--warning); }
+  #nearWhy { margin-top:10px; }
+  .near-body { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:18px; margin-top:14px; }
+  #nearMap { min-height:340px; border-radius:12px; border:1px solid var(--line); background:#0b0e13; z-index:0; }
+  .place { display:flex; gap:12px; align-items:flex-start; padding:10px 6px; border-bottom:1px solid var(--line); cursor:pointer; border-radius:8px; }
+  .place:hover { background:#ffffff06; } .place:last-of-type { border-bottom:0; }
+  .place .num, .pin { width:24px; height:24px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:700;
+    background:var(--ok); color:#0e1116; }
+  .pin { border:2px solid #0e1116; box-shadow:0 0 10px #3fb95099; }
+  .place .t { flex:1; min-width:0; } .place .t b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .place .acts { display:flex; gap:6px; margin-top:6px; }
+  .place .acts a { color:var(--info); text-decoration:none; font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; }
+  .place .km { color:var(--fg); font-weight:600; white-space:nowrap; }
+  .leaflet-container { font:inherit; background:#0b0e13; }
+  .leaflet-tile-pane { filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.6); }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--card); color:var(--fg); border:1px solid var(--line); }
+  .leaflet-control-attribution { background:#0e1116cc !important; color:var(--mute); } .leaflet-control-attribution a { color:var(--info); }
+  @media (max-width: 860px) { .near-body { grid-template-columns:minmax(0,1fr); } #nearMap { min-height:260px; } .near-loc input { width:auto; flex:1; } .near-loc { width:100%; } }
 </style>
 </head>
 <body>
@@ -217,6 +240,19 @@
     </div>
     <div id="answer"></div>
   </section>
+  <section class="card wide" id="nearCard">
+    <h2>Nearby help</h2>
+    <div class="near-top">
+      <div class="chips" id="nearKinds"></div>
+      <form class="near-loc" id="nearForm">
+        <button type="button" class="ghost" id="nearGeo">Use my location</button>
+        <input name="q" minlength="2" maxlength="200" required placeholder="or city / postcode">
+        <button>Search</button>
+      </form>
+    </div>
+    <div class="mute small" id="nearWhy"></div>
+    <div class="near-body" id="nearBody" hidden><div id="nearMap"></div><div id="nearList"></div></div>
+  </section>
   <section class="card wide">
     <h2>Systems</h2>
     <div class="systems" id="vitals"></div>
@@ -253,7 +289,7 @@ async function api(path, opts = {}) {
   if (authEnabled && window.Clerk?.session) headers.Authorization = `Bearer ${await Clerk.session.getToken()}`;
   if (opts.body) headers["Content-Type"] = "application/json";
   const r = await fetch(path, {...opts, headers});
-  if (!r.ok) { const msg = (await r.json().catch(() => ({}))).detail || r.statusText; alert(msg); throw new Error(msg); }
+  if (!r.ok) { const msg = (await r.json().catch(() => ({}))).detail || r.statusText; if (!opts.quiet) alert(msg); throw new Error(msg); }
   return r.status === 204 ? null : r.json();
 }
 const VITALS = [
@@ -417,6 +453,7 @@ async function refresh() {
     <div>${esc(a.label)}${a.metric === "dtc" ? ` ${esc(a.value)}` : ""}</div><div class="mute small">${new Date(a.timestamp).toLocaleString()} · ${a.acknowledged ? "resolved" : "open"}</div></div></div>`),
     6, "alerts");
   if (!log.length) $("#log").innerHTML = `<span class="mute">No alerts yet.</span>`;
+  if (nearVin !== vin) { nearVin = vin; nearKind = null; loadNearby(); }
   if (lr) { const f = $("#svcForm"); f.odometer_km.value ||= Math.round(lr.odometer_km); f.performed_on.value ||= new Date().toISOString().slice(0, 10); }
 }
 
@@ -460,6 +497,95 @@ $("#vehForm").onsubmit = async e => {
   body.year = +body.year; body.vin = body.vin.toUpperCase();
   await api(`/api/vehicles/${body.vin}`, {method: "PUT", body: JSON.stringify(body)});
   e.target.reset(); loadVehicles(body.vin);
+};
+
+const NEAR_KINDS = {mechanic: "Mechanic", tyres: "Tire shop", parts: "Parts store", dealer: "Car dealer", charging: "EV charger"};
+let nearVin = null, nearKind = null, nearMap = null, nearLayer = null, leafletP = null;
+let nearLoc = JSON.parse(localStorage.getItem("vd-near-loc") || "null");
+const saveLoc = l => { nearLoc = l; localStorage.setItem("vd-near-loc", JSON.stringify(l)); };
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  return leafletP ||= new Promise((ok, fail) => {
+    const css = Object.assign(document.createElement("link"), {rel: "stylesheet", href: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+      integrity: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=", crossOrigin: ""});
+    const js = Object.assign(document.createElement("script"), {src: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+      integrity: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=", crossOrigin: "", onload: ok, onerror: fail});
+    document.head.append(css, js);
+  });
+}
+async function loadNearby(kind = nearKind) {
+  const forVin = vin, qs = new URLSearchParams(kind ? {kind} : {});
+  if (nearLoc) { qs.set("lat", nearLoc.lat); qs.set("lon", nearLoc.lon); }
+  if (nearLoc) $("#nearWhy").textContent = "Searching nearby…";
+  try {
+    const res = await api(`/api/vehicles/${vin}/nearby?${qs}`, {quiet: true});
+    if (forVin === vin) renderNearby(res);
+  } catch (err) { $("#nearWhy").textContent = err.message; }
+}
+function renderNearby(res) {
+  nearKind = res.kind;
+  const needs = new Map(res.needs.map(n => [n.kind, n.reason]));
+  const kinds = [...needs.keys(), ...Object.keys(NEAR_KINDS).filter(k => !needs.has(k))];
+  $("#nearKinds").innerHTML = kinds.map(k => `<button type="button" class="chip kind${k === res.kind ? " on" : ""}${needs.has(k) ? " need" : ""}"
+    data-kind="${k}" ${needs.has(k) ? `title="For: ${esc(needs.get(k))}"` : ""}>${NEAR_KINDS[k]}</button>`).join("");
+  const why = needs.get(res.kind), noun = res.label.toLowerCase();
+  if (res.lat == null) {
+    $("#nearBody").hidden = true;
+    $("#nearWhy").textContent = `${why ? `For ${why.toLowerCase()}: ` : ""}find the closest ${noun} using your location or a city / postcode.`;
+    return;
+  }
+  const where = nearLoc?.label || "you";
+  $("#nearWhy").innerHTML = res.places.length
+    ? `${why ? `For <b>${esc(why.toLowerCase())}</b> · ` : ""}${res.places.length} closest ${esc(noun)}s near ${esc(where)}
+       · <button class="link small" id="nearChange">Change location</button>`
+    : `No ${esc(noun)}s found within ${res.radius_km} km of ${esc(where)}. <button class="link small" id="nearChange">Change location</button>`;
+  $("#nearChange").onclick = () => $("#nearForm").q.focus();
+  $("#nearBody").hidden = !res.places.length;
+  if (!res.places.length) return;
+  const dir = p => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`;
+  $("#nearList").innerHTML = res.places.slice(0, 6).map((p, i) => `<div class="place" data-i="${i}"><span class="num">${i + 1}</span>
+    <div class="t"><b title="${esc(p.name)}">${esc(p.name)}</b><div class="mute small">${[p.address, p.opening_hours].filter(Boolean).map(esc).join(" · ")
+      || "No address listed"}</div>
+    <div class="acts"><a href="${dir(p)}" target="_blank" rel="noopener">Directions</a>${p.phone ? `<a href="tel:${esc(p.phone.replace(/[^+\d]/g, ""))}">Call</a>` : ""}${
+      p.website ? `<a href="${esc(p.website)}" target="_blank" rel="noopener noreferrer">Website</a>` : ""}</div></div>
+    <span class="km">${p.distance_km < 1 ? `${Math.round(p.distance_km * 1000)} m` : `${p.distance_km.toFixed(1)} km`}</span></div>`).join("");
+  loadLeaflet().then(() => {
+    if (!nearMap) {
+      nearMap = L.map("nearMap", {scrollWheelZoom: false});
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(nearMap);
+    }
+    nearLayer?.remove();
+    nearLayer = L.layerGroup().addTo(nearMap);
+    L.circleMarker([res.lat, res.lon], {radius: 8, color: "#58a6ff", fillColor: "#58a6ff", fillOpacity: .9, weight: 3})
+      .bindTooltip(nearLoc?.label === "your location" ? "You" : esc(where)).addTo(nearLayer);
+    const markers = res.places.slice(0, 6).map((p, i) => L.marker([p.lat, p.lon], {icon: L.divIcon({className: "", html: `<div class="pin">${i + 1}</div>`,
+      iconSize: [24, 24], iconAnchor: [12, 12]})}).bindPopup(`<b>${esc(p.name)}</b><br><a href="${dir(p)}" target="_blank" rel="noopener">Directions</a>`).addTo(nearLayer));
+    nearMap.invalidateSize();
+    nearMap.fitBounds(L.featureGroup(markers).getBounds().extend([res.lat, res.lon]), {padding: [30, 30], maxZoom: 15});
+    document.querySelectorAll("#nearList .place").forEach(el => el.onclick = e => {
+      if (e.target.closest("a")) return;
+      const m = markers[+el.dataset.i]; nearMap.flyTo(m.getLatLng(), 15, {duration: .6}); m.openPopup();
+    });
+  }).catch(() => { $("#nearMap").innerHTML = `<div class="mute small" style="padding:14px">Map couldn't load; the list still works.</div>`; });
+}
+$("#nearKinds").onclick = e => { const b = e.target.closest("[data-kind]"); if (b) loadNearby(b.dataset.kind); };
+$("#nearGeo").onclick = () => {
+  if (!navigator.geolocation) { $("#nearWhy").textContent = "Location isn't available here. Type a city or postcode instead."; return; }
+  $("#nearWhy").textContent = "Finding your location…";
+  navigator.geolocation.getCurrentPosition(
+    p => { saveLoc({lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3), label: "your location"}); loadNearby(); },
+    () => { $("#nearWhy").textContent = "Location permission was blocked. Type a city or postcode instead."; },
+    {timeout: 10000, maximumAge: 600000});
+};
+$("#nearForm").onsubmit = async e => {
+  e.preventDefault();
+  const q = e.target.q.value.trim(), qs = new URLSearchParams({q, ...(nearKind ? {kind: nearKind} : {})});
+  $("#nearWhy").textContent = "Searching nearby…";
+  try {
+    const res = await api(`/api/vehicles/${vin}/nearby?${qs}`, {quiet: true});
+    saveLoc({lat: res.lat, lon: res.lon, label: q}); e.target.reset(); renderNearby(res);
+  } catch (err) { $("#nearWhy").textContent = err.message; }
 };
 boot();
 </script>
