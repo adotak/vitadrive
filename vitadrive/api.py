@@ -6,12 +6,12 @@ import secrets
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, assistant
+from . import __version__, assistant, nearby
 from .auth import AuthError, ClerkAuth
 from .demo import DEMO_VEHICLES, seed_vehicle
 from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, ServiceRecord, Vehicle
@@ -218,6 +218,29 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
             return AskOut(answer=assistant.ask(rep, body.question, llm=llm))
         except Exception as exc:  # provider errors (bad key, quota, timeout) shouldn't surface as a bare 500
             raise HTTPException(502, f"AI provider error: {type(exc).__name__}") from None
+
+    @app.get("/api/vehicles/{vin}/nearby", response_model=nearby.NearbyOut)
+    def nearby_places(vin: str = Depends(owned), kind: str | None = None,
+                      lat: float | None = Query(None, ge=-90, le=90), lon: float | None = Query(None, ge=-180, le=180),
+                      q: str | None = Query(None, min_length=2, max_length=200)):
+        """Shops that can fix what this car needs. Without a location, only the suggested needs are returned."""
+        if kind is not None and kind not in nearby.KINDS:
+            raise HTTPException(422, f"kind must be one of: {', '.join(nearby.KINDS)}")
+        needs = nearby.needs(guard(vd.report, vin))
+        kind = kind or (needs[0].kind if needs else "mechanic")
+        out = nearby.NearbyOut(kind=kind, label=nearby.KINDS[kind][0], needs=needs, places=[])
+        if (lat is None or lon is None) and not q:
+            return out
+        try:
+            if lat is None or lon is None:
+                lat, lon = nearby.geocode(q)
+            out.radius_km, out.places = nearby.search(lat, lon, kind)
+        except nearby.PlaceNotFound as exc:
+            raise HTTPException(404, str(exc)) from None
+        except nearby.MapServiceError as exc:
+            raise HTTPException(502, str(exc)) from None
+        out.lat, out.lon = lat, lon
+        return out
 
     return app
 

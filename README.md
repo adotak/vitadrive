@@ -24,6 +24,7 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **Range estimate** | Remaining km from fuel/charge level using *learned* consumption from recent driving (refuel/recharge events ignored), falling back to rated consumption for new cars. |
 | **AI fault detector** | A small autoencoder trained with PyTorch on normal driving flags unusual *combinations* of live sensor values (e.g. one tire dropping while the others hold, a sagging 12V battery), often before any single threshold is crossed. The trained weights ship as JSON and run in plain Python, so the deployed app doesn't need PyTorch. |
 | **Ask VitaDrive** | Dashboard chat built with LangChain: ask "what needs attention on my car?" and it answers from that car's alerts, vitals, maintenance forecast, range and fault-detector result. Only the signed-in owner's car data is sent. Turned on by setting `OPENAI_API_KEY`. |
+| **Nearby help** | Finds the closest mechanics, tire shops, parts stores, dealers or EV chargers for what the car needs right now (e.g. a tire warning suggests tire shops). Uses your browser location or a typed city/postcode, shows them on a map with distance, opening hours, phone and a Google Maps **Directions** link. Data comes from OpenStreetMap (Overpass + Nominatim), so no maps API key or billing is needed. |
 | **Records** | Permanent log (Postgres in production, SQLite locally) of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
 | **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
 | **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. |
@@ -134,7 +135,8 @@ python scripts/train_anomaly.py   # rewrites vitadrive/anomaly_model.json
 Standard OBD-II only exposes some metrics (coolant temp, fuel level, voltage, DTCs, odometer on newer cars).
 Fluid levels, pad wear, TPMS and HV-battery data are manufacturer-specific and should be sent through the REST API
 from the vehicle's own telematics or CAN gateway. Default thresholds and intervals are generic; always follow the
-owner's manual for a specific vehicle.
+owner's manual for a specific vehicle. Nearby shop results depend on OpenStreetMap coverage, which is good in most
+cities but can be sparse in rural areas.
 
 ## License
 
