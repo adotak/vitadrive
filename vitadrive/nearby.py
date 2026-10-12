@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Optional
 
 from pydantic import BaseModel
@@ -19,9 +21,16 @@ OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
 )
+OVERPASS_TIMEOUT_S = 12
+OVERPASS_BUDGET_S = 14
+OVERPASS_ROUNDS = 2
+OVERPASS_RETRY_DELAY_S = 1.0
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-RADII_M = (5_000, 15_000, 40_000)
+RADII_M = (10_000, 40_000)
+FALLBACK_RADII_M = (5_000, 15_000, 40_000)
+NOMINATIM_DELAY_S = 1.1  # Nominatim allows one request per second
 MAX_PLACES = 8
 _CACHE_TTL_S = 600
 _cache: dict[tuple, tuple[float, object]] = {}
@@ -141,15 +150,39 @@ def _cached(key: tuple, fn):
     return val
 
 
+def _overpass_round(body: bytes, timeout: float) -> Optional[list[dict]]:
+    pool = ThreadPoolExecutor(len(OVERPASS_URLS))
+    pending = {pool.submit(_get_json, url, body, timeout) for url in OVERPASS_URLS}
+    try:
+        while pending:
+            done, pending = wait(pending, timeout=timeout + 1, return_when=FIRST_COMPLETED)
+            if not done:
+                return None
+            for fut in done:
+                if fut.exception() is None and isinstance(fut.result(), dict) and "elements" in fut.result():
+                    return fut.result()["elements"]
+        return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def overpass(query: str) -> list[dict]:
+    """Ask every Overpass mirror at once and use the first good answer (public mirrors are often busy or slow).
+
+    Busy mirrors usually fail fast, so if a round fails quickly it is retried once.
+    """
     body = urllib.parse.urlencode({"data": query}).encode()
-    last: Exception | None = None
-    for url in OVERPASS_URLS:
-        try:
-            return _get_json(url, body).get("elements", [])
-        except Exception as exc:  # try the mirror
-            last = exc
-    raise MapServiceError(f"Map service unavailable ({type(last).__name__})")
+    deadline = time.monotonic() + OVERPASS_BUDGET_S
+    for attempt in range(OVERPASS_ROUNDS):
+        left = deadline - time.monotonic()
+        if left < 3:
+            break
+        if attempt:
+            time.sleep(OVERPASS_RETRY_DELAY_S)
+        els = _overpass_round(body, min(OVERPASS_TIMEOUT_S, left))
+        if els is not None:
+            return els
+    raise MapServiceError("The free map service is busy right now. Try again in a minute.")
 
 
 def geocode(q: str) -> tuple[float, float]:
@@ -157,8 +190,8 @@ def geocode(q: str) -> tuple[float, float]:
         url = NOMINATIM_URL + "?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1})
         try:
             hits = _get_json(url, timeout=10)
-        except Exception as exc:
-            raise MapServiceError(f"Location search unavailable ({type(exc).__name__})") from None
+        except Exception:
+            raise MapServiceError("Location search is busy right now. Try again in a minute.") from None
         if not hits:
             raise PlaceNotFound(f"Couldn't find '{q}'")
         return float(hits[0]["lat"]), float(hits[0]["lon"])
@@ -186,20 +219,63 @@ def _place(el: dict, kind: str, lat: float, lon: float) -> Optional[Place]:
     )
 
 
+def _nominatim_places(lat: float, lon: float, kind: str, radius_m: int) -> list[Place]:
+    """Backup lookup: Nominatim's ``[key=value]`` search inside a box around the user."""
+    dlat = radius_m / 111_000
+    dlon = dlat / max(math.cos(math.radians(lat)), 0.01)
+    places: list[Place] = []
+    for f in KINDS[kind][1]:
+        k, v = re.fullmatch(r'\["(.+)"="(.+)"\]', f).groups()
+        params = {"q": f"[{k}={v}]", "format": "jsonv2", "limit": 40, "bounded": 1, "extratags": 1,
+                  "addressdetails": 1, "viewbox": f"{lon - dlon},{lat + dlat},{lon + dlon},{lat - dlat}"}
+        try:
+            hits = _get_json(NOMINATIM_URL + "?" + urllib.parse.urlencode(params), timeout=10)
+        except Exception:
+            raise MapServiceError("The free map service is busy right now. Try again in a minute.") from None
+        for h in hits:
+            tags = {**(h.get("extratags") or {}), "name": h.get("name")}
+            addr = h.get("address") or {}
+            tags.update({"addr:housenumber": addr.get("house_number"), "addr:street": addr.get("road"),
+                         "addr:city": addr.get("city") or addr.get("town") or addr.get("village") or addr.get("suburb"),
+                         "addr:postcode": addr.get("postcode")})
+            place = _place({"lat": float(h["lat"]), "lon": float(h["lon"]), "tags": tags}, kind, lat, lon)
+            if place and place.distance_km <= radius_m / 1000:
+                places.append(place)
+    return places
+
+
+def _best(places: list[Place], kind: str) -> list[Place]:
+    unique = {(round(p.lat, 4), round(p.lon, 4)): p for p in places}.values()
+    named = sorted(unique, key=lambda p: (p.name == KINDS[kind][0], p.distance_km))
+    return sorted(named[:MAX_PLACES], key=lambda p: p.distance_km)
+
+
 def search(lat: float, lon: float, kind: str) -> tuple[float, list[Place]]:
-    """Closest places of ``kind``, widening the radius until a few are found. Returns (radius_km, places)."""
+    """Closest places of ``kind``, widening the radius until a few are found. Returns (radius_km, places).
+
+    Uses Overpass, and Nominatim when every Overpass mirror is busy.
+    """
     filters = KINDS[kind][1]
 
     def run():
         places: list[Place] = []
-        radius = RADII_M[0]
-        for radius in RADII_M:
-            sel = "".join(f"nwr{f}(around:{radius},{lat},{lon});" for f in filters)
-            els = overpass(f"[out:json][timeout:20];({sel});out center 80;")
-            places = [p for p in (_place(e, kind, lat, lon) for e in els) if p]
-            if len(places) >= 3:
-                break
-        places.sort(key=lambda p: (p.name == KINDS[kind][0], p.distance_km))
-        return radius / 1000, sorted(places[:MAX_PLACES], key=lambda p: p.distance_km)
+        radius = searched = RADII_M[0]
+        try:
+            for radius in RADII_M:
+                sel = "".join(f"nwr{f}(around:{radius},{lat},{lon});" for f in filters)
+                els = overpass(f"[out:json][timeout:10];({sel});out center 80;")
+                places, searched = [p for p in (_place(e, kind, lat, lon) for e in els) if p], radius
+                if len(places) >= 3:
+                    break
+        except MapServiceError:
+            if places:
+                return searched / 1000, _best(places, kind)
+            for i, radius in enumerate(FALLBACK_RADII_M):
+                if i:
+                    time.sleep(NOMINATIM_DELAY_S)
+                places = _nominatim_places(lat, lon, kind, radius)
+                if len(places) >= 3:
+                    break
+        return radius / 1000, _best(places, kind)
 
     return _cached((kind, round(lat, 3), round(lon, 3)), run)
