@@ -40,7 +40,22 @@
   button:disabled { opacity:.6; cursor:default; }
   form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   input { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 10px; width:130px; font:inherit; }
-  .hero-card { display:flex; align-items:center; justify-content:space-between; gap:28px; padding:26px 28px; }
+  .hero-card { display:flex; align-items:center; justify-content:space-between; gap:28px; padding:26px 28px; position:relative; overflow:hidden; }
+  .hero-card > :not(.hero-photo) { position:relative; z-index:1; }
+  .hero-photo { position:absolute; inset:0 0 0 auto; width:62%; background:center/cover no-repeat; opacity:0; transition:opacity .6s;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 55%); mask-image:linear-gradient(90deg,transparent,#000 55%); }
+  .hero-photo.on { opacity:.5; }
+  .hero-photo::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,#14181f 0,transparent 40%,#12161d99); }
+  .photo-credit { position:absolute; right:12px; bottom:8px; z-index:1; font-size:10px; color:#8b949eaa; text-decoration:none; }
+  .photo-credit:hover { color:var(--fg); }
+  .hero-card .gauge-wrap { border-radius:50%; background:radial-gradient(circle,#0e1116e6 58%,#0e111600 71%); }
+  .hero-card .range-note { color:#c9d1d9; text-shadow:0 1px 6px #000; }
+  #recalls a { color:var(--info); }
+  @media (max-width:860px) { .hero-photo { width:100%; } .hero-photo.on { opacity:.28; } }
+  .recall-sum { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .recall-sum b { font-weight:600; }
+  .issue .body.col { flex-direction:column; gap:8px; } .issue .body.col p { margin:0; }
+  .flags { display:flex; flex-wrap:wrap; gap:6px; }
   .hero-main { display:flex; align-items:center; gap:22px; min-width:0; }
   .ring { width:86px; height:86px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:36px; font-weight:700;
     color:var(--c); border:3px solid var(--c); box-shadow:0 0 34px -8px var(--c), inset 0 0 24px -12px var(--c); }
@@ -222,10 +237,16 @@
       </div>
     </div>
     <div id="range"></div>
+    <div class="hero-photo" id="heroPhoto" aria-hidden="true"></div>
+    <a class="photo-credit" id="photoCredit" target="_blank" rel="noopener" hidden>Photo: Wikipedia</a>
   </section>
   <section class="card span-7" id="attention">
     <h2>Needs attention</h2>
     <div id="alerts"></div>
+  </section>
+  <section class="card span-5" id="recallCard">
+    <h2>Safety recalls</h2>
+    <div id="recalls"><span class="mute">Checking the recall database…</span></div>
   </section>
   <section class="card span-5" id="askCard" hidden>
     <h2>Ask VitaDrive</h2>
@@ -324,7 +345,8 @@ function collapsible(id, rows, n, noun) {
     + (rows.length > n ? `<button class="link" onclick="toggleMore('${id}')">${open ? "Show less" : `Show all ${rows.length} ${noun}`}</button>` : "");
   open ? el.removeAttribute("data-collapsed") : el.setAttribute("data-collapsed", "");
 }
-window.toggleMore = id => { expanded.has(id) ? expanded.delete(id) : expanded.add(id); refresh(); };
+window.toggleMore = id => { expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+  id === "recallList" ? collapsible(id, recallRows, 3, "recalls") : refresh(); };
 function issueGroups(alerts) {
   const dtc = alerts.filter(a => a.metric === "dtc");
   const groups = alerts.filter(a => a.metric !== "dtc").map(a => ({sev: a.severity, title: a.label, detail: a.message, ids: [a.id]}));
@@ -369,7 +391,7 @@ async function boot() {
   const cfg = await fetch("/api/config").then(r => r.json());
   authEnabled = cfg.auth_enabled;
   $("#askCard").hidden = !cfg.assistant_enabled;
-  $("#attention").classList.toggle("wide", !cfg.assistant_enabled);
+  $("#askCard").classList.toggle("wide", cfg.assistant_enabled);
   if (authEnabled) {
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -454,8 +476,47 @@ async function refresh() {
     6, "alerts");
   if (!log.length) $("#log").innerHTML = `<span class="mute">No alerts yet.</span>`;
   if (nearVin !== vin) { nearVin = vin; nearKind = null; loadNearby(); }
+  if (webVin !== vin) { webVin = vin; loadPhoto(vin); loadRecalls(vin); }
   if (lr) { const f = $("#svcForm"); f.odometer_km.value ||= Math.round(lr.odometer_km); f.performed_on.value ||= new Date().toISOString().slice(0, 10); }
 }
+
+let webVin = null, recallRows = [];
+async function loadPhoto(forVin) {
+  const el = $("#heroPhoto"), credit = $("#photoCredit");
+  el.classList.remove("on"); credit.hidden = true;
+  const p = await api(`/api/vehicles/${forVin}/photo`, {quiet: true}).catch(() => null);
+  if (!p || forVin !== vin) return;
+  const img = new Image();
+  img.onload = () => { if (forVin !== vin) return; el.style.backgroundImage = `url("${p.image.replace(/["\\\n]/g, encodeURIComponent)}")`; el.classList.add("on");
+    credit.title = p.title; credit.hidden = !p.page_url.startsWith("https://"); if (!credit.hidden) credit.href = p.page_url; };
+  img.src = p.image;
+}
+async function loadRecalls(forVin) {
+  const el = $("#recalls");
+  el.innerHTML = `<span class="mute">Checking the recall database…</span>`;
+  let d;
+  try { d = await api(`/api/vehicles/${forVin}/recalls`, {quiet: true}); }
+  catch (e) {
+    if (forVin === vin) el.innerHTML = `<span class="mute">${esc(e.message)}</span> <button class="link" onclick="loadRecalls(vin)">Try again</button>`;
+    return;
+  }
+  if (forVin !== vin) return;
+  const car = `${esc(d.year)} ${esc(d.make)} ${esc(d.model)}`, rs = d.recalls;
+  const urgent = rs.some(r => r.park_it || r.park_outside), sev = !rs.length ? "ok" : urgent ? "critical" : "warning";
+  const head = `<div class="recall-sum"><span class="dot" style="--c:var(--${sev})"></span><b>${rs.length
+    ? `${rs.length} ${rs.length === 1 ? "recall" : "recalls"} issued for the ${car}` : `No recalls on record for the ${car}`}</b></div>`;
+  const flags = r => [r.park_it && `<span class="badge critical">Don't drive</span>`, r.park_outside && `<span class="badge critical">Park outside</span>`,
+    r.over_the_air && `<span class="badge info">Fixed over the air</span>`].filter(Boolean).join("");
+  const rows = recallRows = rs.map(r => `<details class="issue"><summary><span class="dot" style="--c:var(--${r.park_it || r.park_outside ? "critical" : "warning"})"></span>
+    <span class="t">${esc(r.component)}</span><span class="mute small">${r.reported_on ? fmtDate(r.reported_on) : ""}</span></summary>
+    <div class="body col">${flags(r) ? `<div class="flags">${flags(r)}</div>` : ""}<p>${esc(r.summary)}</p>
+    ${r.remedy ? `<p class="mute small"><b>Fix:</b> ${esc(r.remedy)}</p>` : ""}<span class="mute small">Campaign ${esc(r.campaign)}</span></div></details>`);
+  el.innerHTML = head + `<div id="recallList"></div><p class="mute small" style="margin:10px 0 0">${rs.length
+    ? "Not every car of a model is affected. " : ""}Enter your VIN at <a href="${esc(d.lookup_url)}" target="_blank" rel="noopener">nhtsa.gov/recalls</a>
+    to see open recalls for your exact car. Source: ${esc(d.source)}.</p>`;
+  if (rs.length) collapsible("recallList", rows, 3, "recalls");
+}
+window.loadRecalls = loadRecalls;
 
 window.dismiss = async ids => { for (const id of ids) await api(`/api/alerts/${id}/ack`, {method: "POST"}); refresh(); };
 window.prefill = item => { $("#svcItem").value = item; $("#logSvc").open = true; $("#svcForm").scrollIntoView({behavior: "smooth", block: "center"}); };

@@ -25,6 +25,8 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **AI fault detector** | A small autoencoder trained with PyTorch on normal driving flags unusual *combinations* of live sensor values (e.g. one tire dropping while the others hold, a sagging 12V battery), often before any single threshold is crossed. The trained weights ship as JSON and run in plain Python, so the deployed app doesn't need PyTorch. |
 | **Ask VitaDrive** | Dashboard chat built with LangChain: ask "what needs attention on my car?" and it answers from that car's alerts, vitals, maintenance forecast, range and fault-detector result. Only the signed-in owner's car data is sent. Turned on by setting `OPENAI_API_KEY`. |
 | **Nearby help** | Finds the closest mechanics, tire shops, parts stores, dealers or EV chargers for what the car needs right now (e.g. a tire warning suggests tire shops). Uses your browser location or a typed city/postcode, shows them on a map with distance, opening hours, phone and a Google Maps **Directions** link. Data comes from OpenStreetMap, so no maps API key or billing is needed: all public Overpass mirrors are asked at once, and Nominatim is used as a backup when they are busy. |
+| **Safety recalls** | Checks the car's make, model and year against the official US recall database (NHTSA) and lists published recalls, newest first, with the affected part, what can go wrong, the fix, and "don't drive" / "park outside" flags. No API key needed; results are cached for 6 hours. |
+| **Model photo** | The dashboard header shows a photo of the car's model, taken from its Wikipedia article (credited and linked). If no photo is found the header simply stays plain. |
 | **Records** | Permanent log (Postgres in production, SQLite locally) of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
 | **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
 | **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. |
@@ -136,7 +138,8 @@ Standard OBD-II only exposes some metrics (coolant temp, fuel level, voltage, DT
 Fluid levels, pad wear, TPMS and HV-battery data are manufacturer-specific and should be sent through the REST API
 from the vehicle's own telematics or CAN gateway. Default thresholds and intervals are generic; always follow the
 owner's manual for a specific vehicle. Nearby shop results depend on OpenStreetMap coverage, which is good in most
-cities but can be sparse in rural areas.
+cities but can be sparse in rural areas. Recalls come from the US NHTSA database and are listed per model and year, not per
+VIN, so not every listed recall applies to a given car; check the VIN at https://www.nhtsa.gov/recalls.
 
 ## License
 

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, assistant, nearby
+from . import __version__, assistant, nearby, webinfo
 from .auth import AuthError, ClerkAuth
 from .demo import DEMO_VEHICLES, seed_vehicle
 from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, ServiceRecord, Vehicle
@@ -241,6 +241,24 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
             raise HTTPException(502, str(exc)) from None
         out.lat, out.lon = lat, lon
         return out
+
+    @app.get("/api/vehicles/{vin}/photo", response_model=webinfo.CarPhoto | None)
+    def car_photo(vin: str = Depends(owned)):
+        """A photo of this car's model from Wikipedia, or null when none is found or Wikipedia is down."""
+        v = vd.store.get_vehicle(vin)
+        try:
+            return webinfo.car_photo(v.make, v.model)
+        except webinfo.WebServiceError:
+            return None
+
+    @app.get("/api/vehicles/{vin}/recalls", response_model=webinfo.RecallsOut)
+    def car_recalls(vin: str = Depends(owned)):
+        """Safety recalls published by NHTSA for this car's make, model and year."""
+        v = vd.store.get_vehicle(vin)
+        try:
+            return webinfo.recalls(v.make, v.model, v.year)
+        except webinfo.WebServiceError as exc:
+            raise HTTPException(502, str(exc)) from None
 
     return app
 
