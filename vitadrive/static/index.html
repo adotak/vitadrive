@@ -513,14 +513,22 @@ function loadLeaflet() {
     document.head.append(css, js);
   });
 }
+let nearSeq = 0;
+function nearFail(err, retry) {
+  const msg = err.name === "TimeoutError" || err.name === "AbortError"
+    ? "The map service took too long to answer." : err.message;
+  $("#nearWhy").innerHTML = `${esc(msg)} <button class="link small" id="nearRetry">Try again</button>`;
+  $("#nearRetry").onclick = retry;
+}
+const nearApi = qs => api(`/api/vehicles/${vin}/nearby?${qs}`, {quiet: true, signal: AbortSignal.timeout(60000)});
 async function loadNearby(kind = nearKind) {
-  const forVin = vin, qs = new URLSearchParams(kind ? {kind} : {});
+  const seq = ++nearSeq, qs = new URLSearchParams(kind ? {kind} : {});
   if (nearLoc) { qs.set("lat", nearLoc.lat); qs.set("lon", nearLoc.lon); }
-  if (nearLoc) $("#nearWhy").textContent = "Searching nearby…";
+  if (nearLoc) $("#nearWhy").textContent = `Searching near ${nearLoc.label}…`;
   try {
-    const res = await api(`/api/vehicles/${vin}/nearby?${qs}`, {quiet: true});
-    if (forVin === vin) renderNearby(res);
-  } catch (err) { $("#nearWhy").textContent = err.message; }
+    const res = await nearApi(qs);
+    if (seq === nearSeq) renderNearby(res);
+  } catch (err) { if (seq === nearSeq) nearFail(err, () => loadNearby(kind)); }
 }
 function renderNearby(res) {
   nearKind = res.kind;
@@ -536,7 +544,7 @@ function renderNearby(res) {
   }
   const where = nearLoc?.label || "you";
   $("#nearWhy").innerHTML = res.places.length
-    ? `${why ? `For <b>${esc(why.toLowerCase())}</b> · ` : ""}${res.places.length} closest ${esc(noun)}s near ${esc(where)}
+    ? `${why ? `For <b>${esc(why.toLowerCase())}</b> · ` : ""}${Math.min(res.places.length, 6)} closest ${esc(noun)}s near ${esc(where)}
        · <button class="link small" id="nearChange">Change location</button>`
     : `No ${esc(noun)}s found within ${res.radius_km} km of ${esc(where)}. <button class="link small" id="nearChange">Change location</button>`;
   $("#nearChange").onclick = () => $("#nearForm").q.focus();
@@ -570,22 +578,32 @@ function renderNearby(res) {
   }).catch(() => { $("#nearMap").innerHTML = `<div class="mute small" style="padding:14px">Map couldn't load; the list still works.</div>`; });
 }
 $("#nearKinds").onclick = e => { const b = e.target.closest("[data-kind]"); if (b) loadNearby(b.dataset.kind); };
+const GEO_ERR = {
+  1: "Location is blocked for this site. Allow it from the icon in the address bar, or type a city or postcode.",
+  2: "Your device couldn't work out where you are. Type a city or postcode instead.",
+  3: "Finding your location took too long. Try again, or type a city or postcode.",
+};
 $("#nearGeo").onclick = () => {
-  if (!navigator.geolocation) { $("#nearWhy").textContent = "Location isn't available here. Type a city or postcode instead."; return; }
+  if (!navigator.geolocation || !window.isSecureContext) {
+    $("#nearWhy").textContent = "Location isn't available here. Type a city or postcode instead."; return;
+  }
+  ++nearSeq;
   $("#nearWhy").textContent = "Finding your location…";
   navigator.geolocation.getCurrentPosition(
-    p => { saveLoc({lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3), label: "your location"}); loadNearby(); },
-    () => { $("#nearWhy").textContent = "Location permission was blocked. Type a city or postcode instead."; },
-    {timeout: 10000, maximumAge: 600000});
+    p => { saveLoc({lat: +p.coords.latitude.toFixed(4), lon: +p.coords.longitude.toFixed(4), label: "your location"}); loadNearby(); },
+    err => { $("#nearWhy").textContent = GEO_ERR[err.code] || GEO_ERR[2]; },
+    {enableHighAccuracy: false, timeout: 20000, maximumAge: 300000});
 };
 $("#nearForm").onsubmit = async e => {
   e.preventDefault();
-  const q = e.target.q.value.trim(), qs = new URLSearchParams({q, ...(nearKind ? {kind: nearKind} : {})});
-  $("#nearWhy").textContent = "Searching nearby…";
+  const form = e.target, q = form.q.value.trim(), seq = ++nearSeq;
+  const qs = new URLSearchParams({q, ...(nearKind ? {kind: nearKind} : {})});
+  $("#nearWhy").textContent = `Searching near ${q}…`;
   try {
-    const res = await api(`/api/vehicles/${vin}/nearby?${qs}`, {quiet: true});
-    saveLoc({lat: res.lat, lon: res.lon, label: q}); e.target.reset(); renderNearby(res);
-  } catch (err) { $("#nearWhy").textContent = err.message; }
+    const res = await nearApi(qs);
+    if (seq !== nearSeq) return;
+    saveLoc({lat: res.lat, lon: res.lon, label: q}); form.reset(); renderNearby(res);
+  } catch (err) { if (seq === nearSeq) nearFail(err, () => form.requestSubmit()); }
 };
 boot();
 </script>
