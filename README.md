@@ -24,6 +24,7 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **Range estimate** | Remaining km from fuel/charge level using *learned* consumption from recent driving (refuel/recharge events ignored), falling back to rated consumption for new cars. |
 | **AI fault detector** | A small autoencoder trained with PyTorch on normal driving flags unusual *combinations* of live sensor values (e.g. one tire dropping while the others hold, a sagging 12V battery), often before any single threshold is crossed. The trained weights ship as JSON and run in plain Python, so the deployed app doesn't need PyTorch. |
 | **Ask VitaDrive** | Dashboard chat built with LangChain: ask "what needs attention on my car?" and it answers from that car's alerts, vitals, maintenance forecast, range and fault-detector result. Only the signed-in owner's car data is sent. Turned on by setting `OPENAI_API_KEY`. |
+| **Phone alerts** | A **Turn on alerts** button in the dashboard header subscribes the phone or computer to Web Push notifications. When a reading turns critical (e.g. a flat tire or low oil pressure), the owner gets a notification even with the site closed; tapping it opens that car. Each new critical condition notifies once, not on every reading. Works in Chrome, Edge, Firefox and Safari; on iPhone/iPad only in the installed app (Share → **Add to Home Screen**). Turned on by setting `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate them with `vitadrive vapid-keys`). |
 | **Nearby help** | Finds the closest mechanics, tire shops, parts stores, dealers or EV chargers for what the car needs right now (e.g. a tire warning suggests tire shops). Uses your browser location or a typed city/postcode, shows them on a map with distance, opening hours, phone and a Google Maps **Directions** link. Data comes from OpenStreetMap, so no maps API key or billing is needed: all public Overpass mirrors are asked at once, and Nominatim is used as a backup when they are busy. |
 | **Safety recalls** | Checks the car's make, model and year against the official US recall database (NHTSA) and lists published recalls, newest first, with the affected part, what can go wrong, the fix, and "don't drive" / "park outside" flags. No API key needed; results are cached for 6 hours. |
 | **Model photo** | The dashboard header shows a photo of the car's model, taken from its Wikipedia article (credited and linked). If no photo is found the header simply stays plain. |
@@ -82,7 +83,8 @@ curl -X POST localhost:8000/api/vehicles/1HGCM82633A004352/readings -H "X-API-Ke
 
 Deploy on **Vercel** with a **Supabase** Postgres database and **Clerk** login. The step-by-step guide is in
 [docs/DEPLOY.md](docs/DEPLOY.md). Settings are read from environment variables (see `.env.example`):
-`DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_AUTHORIZED_PARTIES`.
+`DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_AUTHORIZED_PARTIES`, and optionally `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
+(phone alerts) and `OPENAI_API_KEY` (chat).
 
 Troubleshooting:
 
@@ -91,6 +93,8 @@ Troubleshooting:
 - **"Token issued for an unauthorized origin" after signing in**: `CLERK_AUTHORIZED_PARTIES` doesn't list the
   address the login came from (the error names it). Set it to your site URL, e.g. `https://vitadrive.vercel.app`,
   and redeploy.
+- **No "Turn on alerts" button**: the VAPID keys aren't set (or the deploy predates them), or the browser doesn't
+  support push. On iPhone it only appears in the app opened from the home screen.
 - **"Development mode" under the sign-in box**: Clerk test keys (`pk_test_...`) are in use. Production keys
   require your own domain.
 

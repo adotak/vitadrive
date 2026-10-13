@@ -18,6 +18,7 @@ dependencies = [
     "pyjwt[crypto]>=2.8",
     "langchain-core>=0.3",
     "langchain-openai>=0.3",
+    "pywebpush>=2.0",
 ]
 
 [project.optional-dependencies]

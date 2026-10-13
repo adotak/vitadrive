@@ -36,6 +36,10 @@
   th { color:var(--mute); font-weight:500; font-size:12px; }
   button { background:#238636; color:#fff; border:0; border-radius:8px; padding:7px 14px; cursor:pointer; font:inherit; }
   button.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
+  .alerts-menu { position:relative; } #alertsBtn .dot { display:inline-block; margin-right:8px; vertical-align:middle; }
+  .pop { position:absolute; right:0; top:calc(100% + 6px); z-index:6; min-width:180px; display:flex; flex-direction:column;
+    padding:6px 14px; background:#171c24; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 30px #0009; }
+  .pop[hidden] { display:none; } .pop .link { text-align:left; }
   button.link { background:none; border:0; color:var(--info); padding:6px 0; }
   button:disabled { opacity:.6; cursor:default; }
   form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
@@ -158,6 +162,9 @@
   <h1>Vita<span>Drive</span></h1>
   <select id="vehicle" aria-label="Vehicle"></select>
   <span style="flex:1"></span>
+  <div class="alerts-menu"><button class="ghost" id="alertsBtn" hidden>Turn on alerts</button>
+    <div class="pop" id="alertsPop" hidden><button class="link" id="pushTest">Send a test alert</button>
+      <button class="link" id="pushOff">Turn off alerts</button></div></div>
   <button class="ghost" id="apiKeyBtn" hidden>API key</button>
   <button class="ghost" id="demoBtn">Add demo cars</button>
   <div id="userButton"></div>
@@ -410,7 +417,8 @@ async function boot() {
     }
     Clerk.mountUserButton($("#userButton"));
   }
-  await loadVehicles();
+  initPush(cfg);
+  await loadVehicles(new URLSearchParams(location.search).get("vin"));
   setInterval(() => vin && refresh(), 15000);
 }
 
@@ -517,6 +525,69 @@ async function loadRecalls(forVin) {
   if (rs.length) collapsible("recallList", rows, 3, "recalls");
 }
 window.loadRecalls = loadRecalls;
+
+const b64u8 = s => Uint8Array.from(atob((s + "===".slice((s.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+let pushKey = null;
+const pushSub = async () => (await navigator.serviceWorker.getRegistration("/"))?.pushManager.getSubscription() ?? null;
+const keyMatches = sub => { const k = sub.options?.applicationServerKey; if (!k) return true;
+  const a = new Uint8Array(k), b = b64u8(pushKey); return a.length === b.length && a.every((x, i) => x === b[i]); };
+function setAlertsBtn(state) {
+  const b = $("#alertsBtn"); b.dataset.state = state; $("#alertsPop").hidden = true;
+  b.innerHTML = state === "on" ? `<span class="dot"></span>Alerts on` : state === "blocked" ? "Alerts blocked" : "Turn on alerts";
+}
+async function initPush(cfg) {
+  pushKey = cfg.push_public_key;
+  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const iosBrowser = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone;
+  if (!pushKey || (!supported && !iosBrowser)) return;
+  $("#alertsBtn").hidden = false;
+  if (!supported) return setAlertsBtn("ios");
+  if (Notification.permission === "denied") return setAlertsBtn("blocked");
+  const sub = await pushSub().catch(() => null);
+  if (sub && Notification.permission === "granted") {
+    if (keyMatches(sub)) {  // re-register: restores it after an account switch or a server-side cleanup
+      await api("/api/push/subscriptions", {method: "POST", body: JSON.stringify(sub.toJSON()), quiet: true}).catch(() => {});
+      return setAlertsBtn("on");
+    }
+    await sub.unsubscribe().catch(() => {});
+  }
+  setAlertsBtn("off");
+}
+async function enablePush() {
+  const b = $("#alertsBtn"); b.disabled = true;
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return setAlertsBtn(perm === "denied" ? "blocked" : "off");
+    await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64u8(pushKey)});
+    await api("/api/push/subscriptions", {method: "POST", body: JSON.stringify(sub.toJSON()), quiet: true});
+    setAlertsBtn("on");
+    api("/api/push/test", {method: "POST", quiet: true}).catch(() => {});
+  } catch (e) { alert(`Couldn't turn on alerts: ${e.message}`); }
+  finally { b.disabled = false; }
+}
+$("#alertsBtn").onclick = () => {
+  const s = $("#alertsBtn").dataset.state;
+  if (s === "on") $("#alertsPop").hidden = !$("#alertsPop").hidden;
+  else if (s === "ios") alert("On iPhone and iPad, alerts work in the installed app: tap Share, then Add to Home Screen, and open VitaDrive from your home screen.");
+  else if (s === "blocked") alert("Notifications are blocked for this site. Allow them in your browser's site settings, then reload the page.");
+  else enablePush();
+};
+$("#pushTest").onclick = async () => {
+  $("#alertsPop").hidden = true;
+  const r = await api("/api/push/test", {method: "POST"});
+  if (!r.sent) alert("No device accepted the test alert. Try turning alerts off and on again.");
+};
+$("#pushOff").onclick = async () => {
+  const sub = await pushSub().catch(() => null);
+  if (sub) {
+    await api(`/api/push/subscriptions?endpoint=${encodeURIComponent(sub.endpoint)}`, {method: "DELETE", quiet: true}).catch(() => {});
+    await sub.unsubscribe().catch(() => {});
+  }
+  setAlertsBtn("off");
+};
+document.addEventListener("click", e => { if (!e.target.closest(".alerts-menu")) $("#alertsPop").hidden = true; });
 
 window.dismiss = async ids => { for (const id of ids) await api(`/api/alerts/${id}/ack`, {method: "POST"}); refresh(); };
 window.prefill = item => { $("#svcItem").value = item; $("#logSvc").open = true; $("#svcForm").scrollIntoView({behavior: "smooth", block: "center"}); };

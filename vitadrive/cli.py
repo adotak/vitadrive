@@ -60,6 +60,14 @@ def cmd_report(args) -> None:
               f"({m.days_remaining} days, {km})  {m.reason}")
 
 
+def cmd_vapid_keys(args) -> None:
+    from .push import generate_keys
+
+    public, private = generate_keys()
+    print(f"VAPID_PUBLIC_KEY={public}\nVAPID_PRIVATE_KEY={private}")
+    print("Add both to your server environment (e.g. Vercel). Keep the private key secret.", file=sys.stderr)
+
+
 def cmd_serve(args) -> None:
     import uvicorn
 
@@ -97,6 +105,9 @@ def main(argv=None) -> None:
     k = sub.add_parser("api-key", help="Issue a new ingest API key for a vehicle")
     k.add_argument("vin")
     k.set_defaults(fn=cmd_api_key)
+
+    v = sub.add_parser("vapid-keys", help="Generate the key pair that turns on phone/desktop alerts")
+    v.set_defaults(fn=cmd_vapid_keys)
 
     s = sub.add_parser("serve", help="Run the REST API and dashboard")
     s.add_argument("--host", default="127.0.0.1")
