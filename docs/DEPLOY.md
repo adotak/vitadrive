@@ -53,6 +53,19 @@ The chat uses OpenAI through LangChain. Without a key the chat box is hidden and
 
 Keep the key only in Vercel. Never commit it or paste it into chats.
 
+### Turning on phone alerts (optional)
+
+VitaDrive can send a notification to your phone or computer when a reading turns critical, even when the site is closed. It uses the browser's built-in Web Push, which is free. The server needs a pair of keys (called VAPID keys) to sign its messages.
+
+1. Generate the keys once, on your own computer: `pip install -e .` and then `vitadrive vapid-keys`. It prints two lines.
+2. In Vercel, open **Settings → Environment Variables** and add both: `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. Optionally add `VAPID_SUBJECT` (a `mailto:` address push services can contact; default `mailto:alerts@vitadrive.app`).
+3. Go to **Deployments**, open the **⋯** menu on the latest deployment and click **Redeploy**.
+4. Open the dashboard, click **Turn on alerts** and allow notifications. You get a test notification straight away. Do this on each device you want alerts on.
+
+On iPhone and iPad, open the site in Safari, tap **Share → Add to Home Screen**, then open VitaDrive from the home screen and turn alerts on there (Apple only allows web notifications for installed apps).
+
+Keep the private key only in Vercel. If you change the keys later, every device has to turn alerts on again.
+
 The AI fault detector needs no setup: its trained model is part of the code.
 
 ## 4. Connecting a car

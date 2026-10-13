@@ -6,6 +6,7 @@ pass a ``postgresql://`` URL).
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import threading
 from collections.abc import Iterator
@@ -71,6 +72,13 @@ services_t = Table(
     Column("item", String(64), nullable=False),
     Column("performed_on", String(10), nullable=False),
     Column("odometer_km", Float, nullable=False),
+    Column("data", Text, nullable=False),
+)
+push_subs_t = Table(
+    "push_subscriptions", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("owner_id", String(255), nullable=False, index=True),
+    Column("endpoint", String(2000), nullable=False, unique=True),
     Column("data", Text, nullable=False),
 )
 
@@ -240,6 +248,25 @@ class Store:
                 odometer_km=record.odometer_km, data=record.model_dump_json(exclude={"id"}),
             ))
         return record.model_copy(update={"id": result.inserted_primary_key[0]})
+
+    # push subscriptions (one row per browser/device that turned alerts on)
+    def save_push_subscription(self, owner_id: str, subscription: dict) -> None:
+        with self.transaction() as c:
+            c.execute(push_subs_t.delete().where(push_subs_t.c.endpoint == subscription["endpoint"]))
+            c.execute(insert(push_subs_t).values(owner_id=owner_id, endpoint=subscription["endpoint"],
+                                                 data=json.dumps(subscription)))
+
+    def push_subscriptions(self, owner_id: str) -> list[dict]:
+        with self.transaction() as c:
+            rows = c.execute(select(push_subs_t.c.data).where(push_subs_t.c.owner_id == owner_id)).all()
+        return [json.loads(r[0]) for r in rows]
+
+    def delete_push_subscription(self, endpoint: str, owner_id: str | None = None) -> bool:
+        q = push_subs_t.delete().where(push_subs_t.c.endpoint == endpoint)
+        if owner_id is not None:
+            q = q.where(push_subs_t.c.owner_id == owner_id)
+        with self.transaction() as c:
+            return c.execute(q).rowcount > 0
 
     def services(self, vin: str) -> list[ServiceRecord]:
         q = (select(services_t.c.id, services_t.c.data).where(services_t.c.vin == vin)

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, assistant, nearby, webinfo
+from . import __version__, assistant, nearby, push, webinfo
 from .auth import AuthError, ClerkAuth
 from .demo import DEMO_VEHICLES, seed_vehicle
 from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, ServiceRecord, Vehicle
@@ -51,6 +51,11 @@ class ConfigOut(BaseModel):
     clerk_publishable_key: str | None
     clerk_frontend_api: str | None
     assistant_enabled: bool = False
+    push_public_key: str | None = None
+
+
+class PushTestOut(BaseModel):
+    sent: int
 
 
 class AskIn(BaseModel):
@@ -114,6 +119,10 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
     def manifest():
         return FileResponse(_STATIC / "manifest.webmanifest", media_type="application/manifest+json")
 
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker():
+        return FileResponse(_STATIC / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
     @app.get("/", include_in_schema=False)
     def dashboard():
         return FileResponse(_STATIC / "index.html")
@@ -122,7 +131,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
     def config():
         return ConfigOut(auth_enabled=auth.enabled, clerk_publishable_key=auth.publishable_key,
                          clerk_frontend_api=auth.frontend_api,
-                         assistant_enabled=llm is not None or assistant.enabled())
+                         assistant_enabled=llm is not None or assistant.enabled(), push_public_key=push.public_key())
 
     @app.get("/api/health", include_in_schema=False)
     def health():
@@ -165,7 +174,9 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
     def ingest(reading: SensorReading, vin: str = Depends(ingest_vin)):
         if reading.vin != vin:
             raise HTTPException(400, "VIN in path and body must match")
-        return guard(vd.ingest, reading)
+        alerts = guard(vd.ingest, reading)
+        push.notify_critical(vd.store, vin, alerts)
+        return alerts
 
     @app.get("/api/vehicles/{vin}/readings", response_model=list[SensorReading])
     def readings(vin: str = Depends(owned), limit: int = 200):
@@ -241,6 +252,23 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
             raise HTTPException(502, str(exc)) from None
         out.lat, out.lon = lat, lon
         return out
+
+    @app.post("/api/push/subscriptions", status_code=204)
+    def push_subscribe(sub: push.PushSubscription, user: str = Depends(current_user)):
+        """Remember this browser so critical alerts on the user's cars reach it as notifications."""
+        if not push.enabled():
+            raise HTTPException(503, "Alerts are off: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the server")
+        vd.store.save_push_subscription(user, sub.model_dump())
+
+    @app.delete("/api/push/subscriptions", status_code=204)
+    def push_unsubscribe(endpoint: str = Query(max_length=2000), user: str = Depends(current_user)):
+        vd.store.delete_push_subscription(endpoint, owner_id=user)
+
+    @app.post("/api/push/test", response_model=PushTestOut)
+    def push_test(user: str = Depends(current_user)):
+        return PushTestOut(sent=push.send_to_user(vd.store, user, {
+            "title": "VitaDrive alerts are on", "body": "You'll get a notification here when a reading turns critical.",
+            "url": "/", "tag": "vitadrive-test"}, ttl=600))
 
     @app.get("/api/vehicles/{vin}/photo", response_model=webinfo.CarPhoto | None)
     def car_photo(vin: str = Depends(owned)):
