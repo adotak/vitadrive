@@ -249,10 +249,12 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
 
     @app.get("/api/vehicles/{vin}/maintenance/calendar.ics", response_class=Response)
     def calendar(vin: str = Depends(owned)):
-        forecasts = guard(vd.maintenance, vin)
+        today = date.today()
+        forecasts = guard(vd.maintenance, vin, today=today)
         if not forecasts:
             raise HTTPException(409, "Add a sensor reading before exporting maintenance dates")
-        return Response(maintenance_calendar(vd.store.get_vehicle(vin), forecasts), media_type="text/calendar",
+        content = maintenance_calendar(vd.store.get_vehicle(vin), forecasts, today=today)
+        return Response(content, media_type="text/calendar",
                         headers={"Content-Disposition": 'attachment; filename="vitadrive-maintenance.ics"',
                                  "Cache-Control": "private, no-store"})
 

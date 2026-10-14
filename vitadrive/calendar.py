@@ -1,7 +1,7 @@
 """Portable iCalendar snapshots of a vehicle's current maintenance forecast."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 
 from .models import MaintenanceForecast, Vehicle
@@ -32,14 +32,16 @@ def maintenance_calendar(
     forecasts: list[MaintenanceForecast],
     *,
     now: datetime | None = None,
+    today: date | None = None,
 ) -> str:
-    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    today = now.date()
+    now = now or datetime.now().astimezone()
+    today = today or now.date()
+    stamp = now.astimezone(timezone.utc)
     car = f"{vehicle.year} {vehicle.make} {vehicle.model} (…{vehicle.vin[-4:]})"
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//VitaDrive//Maintenance//EN", "CALSCALE:GREGORIAN"]
     for forecast in sorted(forecasts, key=lambda f: (f.due_date, f.item)):
-        day = max(forecast.due_date, today)
-        overdue = forecast.due_date < today
+        overdue = forecast.due_date < today or (forecast.km_remaining is not None and forecast.km_remaining < 0)
+        day = today if overdue else forecast.due_date
         summary = f"{'OVERDUE: ' if overdue else ''}{forecast.label} — {car}"
         description = [
             car,
@@ -56,7 +58,7 @@ def maintenance_calendar(
         lines.extend([
             "BEGIN:VEVENT",
             f"UID:{uid}@vitadrive",
-            f"DTSTAMP:{now:%Y%m%dT%H%M%SZ}",
+            f"DTSTAMP:{stamp:%Y%m%dT%H%M%SZ}",
             f"DTSTART;VALUE=DATE:{day:%Y%m%d}",
             f"DTEND;VALUE=DATE:{day + timedelta(days=1):%Y%m%d}",
             f"SUMMARY:{_text(summary)}",

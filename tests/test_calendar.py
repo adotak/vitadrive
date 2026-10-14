@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from vitadrive import api as api_module
 from vitadrive.api import create_app
 from vitadrive.auth import AuthError
 from vitadrive.calendar import maintenance_calendar
@@ -68,6 +69,25 @@ def test_calendar_handles_year_boundaries_and_stable_private_identifiers():
     assert properties(first, "UID") != properties(maintenance_calendar(other_car, [item], now=NOW), "UID")
     assert properties(first, "UID") != properties(
         maintenance_calendar(CAR, [forecast(item="tires")], now=NOW), "UID")
+
+
+def test_mileage_overdue_is_labeled_even_when_projected_date_is_today():
+    item = forecast(due_date=NOW.date(), km_remaining=-100, status="critical")
+    calendar = maintenance_calendar(CAR, [item], now=NOW)
+    assert properties(calendar, "SUMMARY")[0].startswith("OVERDUE: ")
+    assert "arrange service as soon as possible" in unfold(calendar)
+    assert "DTSTART;VALUE=DATE:20261014" in calendar
+    assert "BEGIN:VALARM" not in calendar
+
+
+@pytest.mark.parametrize("offset", [-7, 14])
+def test_calendar_keeps_local_day_but_uses_utc_stamp(offset):
+    instant = NOW.replace(hour=2 if offset < 0 else 12)
+    local_now = instant.astimezone(timezone(timedelta(hours=offset)))
+    item = forecast(due_date=date(2026, 9, 1))
+    calendar = maintenance_calendar(CAR, [item], now=local_now)
+    assert f"DTSTART;VALUE=DATE:{local_now:%Y%m%d}" in calendar
+    assert f"DTSTAMP:{instant:%Y%m%dT%H%M%SZ}" in calendar
 
 
 def test_utf8_folding_and_text_escaping_prevent_content_injection():
@@ -141,3 +161,19 @@ def test_export_reflects_logged_service_and_ev_schedule(client):
     calendar = unfold(client.get(path, headers=ALICE).text)
     assert "Engine oil & filter" not in calendar and "Spark plugs" not in calendar
     assert "Traction battery health check" in calendar
+
+
+def test_api_uses_one_day_for_forecasting_and_export(client, monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 10, 13)
+
+    monkeypatch.setattr(api_module, "date", FixedDate)
+    add_reading(client, date(2025, 9, 1))
+    response = client.get(f"{BASE}/maintenance/calendar.ics", headers=ALICE)
+    assert response.status_code == 200
+    events = unfold(response.text).split("BEGIN:VEVENT")[1:]
+    overdue = [event for event in events if "SUMMARY:OVERDUE:" in event]
+    assert overdue
+    assert all("DTSTART;VALUE=DATE:20261013" in event for event in overdue)
