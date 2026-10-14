@@ -7,12 +7,13 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__, assistant, costs, nearby, push, webinfo
 from .auth import AuthError, ClerkAuth
+from .calendar import maintenance_calendar
 from .demo import DEMO_VEHICLES, seed_vehicle
 from .models import (
     Alert,
@@ -245,6 +246,15 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
     @app.get("/api/vehicles/{vin}/maintenance", response_model=list[MaintenanceForecast])
     def maintenance(vin: str = Depends(owned)):
         return guard(vd.maintenance, vin)
+
+    @app.get("/api/vehicles/{vin}/maintenance/calendar.ics", response_class=Response)
+    def calendar(vin: str = Depends(owned)):
+        forecasts = guard(vd.maintenance, vin)
+        if not forecasts:
+            raise HTTPException(409, "Add a sensor reading before exporting maintenance dates")
+        return Response(maintenance_calendar(vd.store.get_vehicle(vin), forecasts), media_type="text/calendar",
+                        headers={"Content-Disposition": 'attachment; filename="vitadrive-maintenance.ics"',
+                                 "Cache-Control": "private, no-store"})
 
     @app.get("/api/vehicles/{vin}/range", response_model=RangeEstimate | None)
     def range_(vin: str = Depends(owned)):
