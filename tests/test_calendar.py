@@ -136,7 +136,7 @@ def test_export_reflects_logged_service_and_ev_schedule(client):
     after = client.get(path, headers=ALICE).text
     assert "OVERDUE: Engine oil & filter" not in unfold(after)
     assert set(properties(before, "UID")) == set(properties(after, "UID"))
-    ev = CAR.model_copy(update={"powertrain": "ev"}).model_dump(mode="json")
+    ev = {**CAR.model_dump(mode="json"), "powertrain": "ev"}
     client.put(BASE, json=ev, headers=ALICE).raise_for_status()
     calendar = unfold(client.get(path, headers=ALICE).text)
     assert "Engine oil & filter" not in calendar and "Spark plugs" not in calendar
