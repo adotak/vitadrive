@@ -42,6 +42,12 @@
   .pop[hidden] { display:none; } .pop .link { text-align:left; }
   button.link { background:none; border:0; color:var(--info); padding:6px 0; }
   button:disabled { opacity:.6; cursor:default; }
+  .calendar-export { display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; margin-top:16px;
+    padding:14px; border:1px solid var(--line); border-radius:10px; background:#0e111655; }
+  .calendar-export .t { flex:1; min-width:150px; }
+  .calendar-export details { flex-basis:100%; }
+  .calendar-export summary { cursor:pointer; color:var(--info); }
+  .calendar-export p { margin:6px 0 0; }
   form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   input { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 10px; width:130px; font:inherit; }
   .hero-card { display:flex; align-items:center; justify-content:space-between; gap:28px; padding:26px 28px; position:relative; overflow:hidden; }
@@ -297,6 +303,17 @@
   <section class="card span-7">
     <h2>Upcoming maintenance</h2>
     <div id="maint"></div>
+    <div class="calendar-export">
+      <div class="t"><div>Calendar reminders</div><div class="mute small">Google Calendar, Apple Calendar &amp; Outlook</div></div>
+      <button type="button" class="ghost small" id="calendarBtn" disabled>Download .ics</button>
+      <details class="small"><summary>How to use</summary>
+        <p class="mute">Import the file into a separate calendar to keep your predicted service dates handy, with a 1-day reminder.
+          Overdue items appear today. Your calendar app controls notifications.</p>
+        <p class="mute">This is a snapshot, not a live sync. After logging a service or updating readings, replace the old imported calendar
+          with a fresh download. Always follow your owner's manual and act on warnings immediately.</p>
+      </details>
+      <div id="calendarStatus" class="mute small" role="status" hidden></div>
+    </div>
     <details class="logsvc" id="logSvc"><summary>Log a service</summary>
       <form id="svcForm">
         <select name="item" id="svcItem"></select>
@@ -342,7 +359,7 @@ async function api(path, opts = {}) {
   if (opts.body) headers["Content-Type"] = "application/json";
   const r = await fetch(path, {...opts, headers});
   if (!r.ok) { const msg = (await r.json().catch(() => ({}))).detail || r.statusText; if (!opts.quiet) alert(msg); throw new Error(msg); }
-  return r.status === 204 ? null : r.json();
+  return r.status === 204 ? null : opts.blob ? r.blob() : r.json();
 }
 const VITALS = [
   ["engine_oil_level_pct","Oil level","%"],["engine_oil_life_pct","Oil life","%"],["engine_oil_pressure_kpa","Oil pressure","kPa"],
@@ -390,6 +407,7 @@ function issueGroups(alerts) {
   return groups.sort((a, b) => SEV.indexOf(b.sev) - SEV.indexOf(a.sev));
 }
 let vin = null;
+let calendarBusy = false, calendarReadyVin = null;
 
 async function loadVehicles(select) {
   const vs = await api("/api/vehicles");
@@ -450,6 +468,16 @@ async function refresh() {
   const [rep, services, log] = await Promise.all([
     api(`/api/vehicles/${vin}/report`), api(`/api/vehicles/${vin}/services`), api(`/api/vehicles/${vin}/alerts?limit=50`)]);
   const v = rep.vehicle, lr = rep.latest_reading, groups = issueGroups(rep.active_alerts);
+  if (v.vin === vin) {
+    calendarReadyVin = rep.maintenance.length ? vin : null;
+    $("#calendarBtn").disabled = calendarBusy || !calendarReadyVin;
+    if (!rep.maintenance.length) {
+      $("#calendarStatus").textContent = "Add a sensor reading to export predicted service dates.";
+      $("#calendarStatus").hidden = false;
+    } else if ($("#calendarStatus").textContent === "Add a sensor reading to export predicted service dates.") {
+      $("#calendarStatus").hidden = true;
+    }
+  }
   const upcoming = [...rep.maintenance].sort((a, b) => a.days_remaining - b.days_remaining), next = upcoming[0];
   $("#statusRing").style.setProperty("--c", `var(--${rep.status})`);
   $("#statusRing").textContent = GLYPH[rep.status];
@@ -655,7 +683,29 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("#services").hidden = b.dataset.tab !== "services"; $("#log").hidden = b.dataset.tab !== "log";
 });
 $("#askChips").onclick = e => { if (e.target.matches("button")) { $("#askForm").q.value = e.target.textContent; $("#askForm").requestSubmit(); } };
-$("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); $("#fuelForm").reset(); $("#answer").textContent = ""; refresh(); };
+$("#vehicle").onchange = e => {
+  vin = e.target.value; calendarReadyVin = null; $("#calendarBtn").disabled = true; $("#calendarStatus").hidden = true;
+  $("#svcForm").reset(); $("#fuelForm").reset(); $("#answer").textContent = ""; refresh();
+};
+$("#calendarBtn").onclick = async () => {
+  const forVin = vin, button = $("#calendarBtn"), status = $("#calendarStatus");
+  if (!forVin || calendarReadyVin !== forVin || calendarBusy) return;
+  calendarBusy = true; button.disabled = true; button.textContent = "Preparing…"; status.hidden = true;
+  try {
+    const blob = await api(`/api/vehicles/${encodeURIComponent(forVin)}/maintenance/calendar.ics`, {blob: true, quiet: true});
+    if (vin !== forVin) return;
+    const url = URL.createObjectURL(blob), link = document.createElement("a");
+    link.href = url; link.download = "vitadrive-maintenance.ics";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    status.textContent = "Calendar file ready. Import it into your calendar app to add reminders.";
+    status.hidden = false;
+  } catch (err) {
+    if (vin === forVin) { status.textContent = `Could not export: ${err.message}`; status.hidden = false; }
+  } finally {
+    calendarBusy = false; button.textContent = "Download .ics"; button.disabled = calendarReadyVin !== vin;
+  }
+};
 $("#askForm").onsubmit = async e => {
   e.preventDefault();
   const btn = e.target.querySelector("button"), out = $("#answer");
