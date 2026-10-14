@@ -94,6 +94,15 @@
   .svc { display:flex; align-items:center; gap:14px; padding:11px 2px; border-bottom:1px solid #222832; }
   .svc .t { flex:1; min-width:0; } .svc .t div:first-child { font-weight:500; }
   [data-collapsed] .extra { display:none; }
+  .cost-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:32px; align-items:end; }
+  .kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px 20px; }
+  .kpi b { display:block; font-size:20px; font-variant-numeric:tabular-nums; } .kpi span { color:var(--mute); font-size:12px; }
+  .kpi.big { grid-column:1/-1; } .kpi.big b { font-size:36px; color:var(--ok); letter-spacing:-.5px; }
+  .bars { display:flex; align-items:flex-end; gap:10px; height:150px; }
+  .bar { flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:6px; font-size:11px; color:var(--mute); }
+  .bar i { width:100%; max-width:48px; min-height:3px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#3fb950,#238636); }
+  .bar.now i { background:linear-gradient(180deg,#58a6ff,#1f6feb); } .bar.now { color:var(--fg); }
+  @media (max-width:760px) { .cost-grid { grid-template-columns:1fr; gap:20px; } .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   details.logsvc { margin-top:14px; } details.logsvc summary { cursor:pointer; color:var(--info); }
   .tabs { display:flex; gap:6px; margin-bottom:10px; }
   .tabs button { background:transparent; color:var(--mute); border:1px solid transparent; padding:5px 12px; border-radius:999px; }
@@ -306,6 +315,21 @@
     <div id="services"></div>
     <div id="log" hidden></div>
   </section>
+  <section class="card wide" id="costCard">
+    <h2 id="costTitle">Fuel costs</h2>
+    <div class="cost-grid"><div class="kpis" id="costKpis"></div><div class="bars" id="costBars"></div></div>
+    <details class="logsvc" id="logFuel"><summary>Log a fill-up</summary>
+      <form id="fuelForm">
+        <input name="filled_on" type="date" required>
+        <input name="odometer_km" type="number" step="0.1" min="0" placeholder="Odometer km" required>
+        <input name="amount" type="number" step="0.01" min="0.01" placeholder="Litres" required>
+        <input name="cost" type="number" step="0.01" min="0" placeholder="Total paid" required>
+        <input name="station" maxlength="120" placeholder="Station">
+        <button>Save</button>
+      </form>
+    </details>
+    <details class="logsvc"><summary id="fuelListTitle">Fill-up history</summary><div id="fuelList"></div></details>
+  </section>
 </main>
 <script>
 const $ = s => document.querySelector(s);
@@ -485,8 +509,43 @@ async function refresh() {
   if (!log.length) $("#log").innerHTML = `<span class="mute">No alerts yet.</span>`;
   if (nearVin !== vin) { nearVin = vin; nearKind = null; loadNearby(); }
   if (webVin !== vin) { webVin = vin; loadPhoto(vin); loadRecalls(vin); }
+  loadCosts(vin);
+  if (lr) { const f = $("#fuelForm"); f.odometer_km.value ||= Math.round(lr.odometer_km); f.filled_on.value ||= new Date().toISOString().slice(0, 10); }
   if (lr) { const f = $("#svcForm"); f.odometer_km.value ||= Math.round(lr.odometer_km); f.performed_on.value ||= new Date().toISOString().slice(0, 10); }
 }
+
+const money = (n, d = 2) => n.toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+const monthName = ym => new Date(`${ym}-01T00:00`).toLocaleString(undefined, {month: "short"});
+async function loadCosts(forVin) {
+  const [s, logs] = await Promise.all([api(`/api/vehicles/${forVin}/costs`, {quiet: true}), api(`/api/vehicles/${forVin}/fuel`, {quiet: true})])
+    .catch(() => [null, []]);
+  if (!s || forVin !== vin) return;
+  const ev = s.unit === "kWh", what = ev ? "charge" : "fill-up";
+  $("#costTitle").textContent = ev ? "Charging costs" : "Fuel costs";
+  $("#logFuel summary").textContent = `Log a ${what}`;
+  $("#fuelListTitle").textContent = `${ev ? "Charging" : "Fill-up"} history`;
+  $("#fuelForm").amount.placeholder = ev ? "kWh" : "Litres";
+  const kpi = (v, l, big) => `<div class="kpi${big ? " big" : ""}"><b>${v}</b><span>${l}</span></div>`;
+  $("#costKpis").innerHTML = !s.fills ? `<span class="mute">No ${what}s logged yet. Log one below; after two you'll see your cost per km.</span>`
+    : kpi(s.cost_per_km == null ? "–" : money(s.cost_per_km, s.cost_per_km < 0.1 ? 3 : 2), "per km driven", true)
+      + kpi(money(s.this_month_cost), "spent this month")
+      + kpi(s.avg_price_per_unit == null ? "–" : money(s.avg_price_per_unit), `average per ${s.unit}`)
+      + kpi(s.consumption_per_100km == null ? "–" : s.consumption_per_100km.toFixed(1), `${s.unit}/100 km, real`);
+  const max = Math.max(...s.months.map(m => m.cost), 1);
+  $("#costBars").innerHTML = !s.fills ? "" : s.months.map((m, i) => `<div class="bar${i === s.months.length - 1 ? " now" : ""}" title="${money(m.cost)}">
+    <span>${m.cost ? Math.round(m.cost).toLocaleString() : ""}</span><i style="height:calc((100% - 40px) * ${m.cost / max})"></i>${monthName(m.month)}</div>`).join("");
+  if (logs.length) collapsible("fuelList", logs.map(l => `<div class="svc"><div class="t"><div>${l.amount} ${s.unit}${l.station ? ` · ${esc(l.station)}` : ""}</div>
+    <div class="mute small">${fmtDate(l.filled_on)} · ${Math.round(l.odometer_km).toLocaleString()} km</div></div>
+    <span class="mute">${money(l.cost)}</span><button class="ghost small" onclick="delFuel(${l.id})">Delete</button></div>`), 5, "entries");
+  else $("#fuelList").innerHTML = `<span class="mute">Nothing logged yet.</span>`;
+}
+window.delFuel = async id => { if (confirm("Delete this entry?")) { await api(`/api/vehicles/${vin}/fuel/${id}`, {method: "DELETE"}); loadCosts(vin); } };
+$("#fuelForm").onsubmit = async e => {
+  e.preventDefault();
+  const body = Object.fromEntries([...new FormData(e.target)].filter(([, v]) => v !== ""));
+  await api(`/api/vehicles/${vin}/fuel`, {method: "POST", body: JSON.stringify(body)});
+  e.target.reset(); refresh();
+};
 
 let webVin = null, recallRows = [];
 async function loadPhoto(forVin) {
@@ -596,7 +655,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("#services").hidden = b.dataset.tab !== "services"; $("#log").hidden = b.dataset.tab !== "log";
 });
 $("#askChips").onclick = e => { if (e.target.matches("button")) { $("#askForm").q.value = e.target.textContent; $("#askForm").requestSubmit(); } };
-$("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); $("#answer").textContent = ""; refresh(); };
+$("#vehicle").onchange = e => { vin = e.target.value; $("#svcForm").reset(); $("#fuelForm").reset(); $("#answer").textContent = ""; refresh(); };
 $("#askForm").onsubmit = async e => {
   e.preventDefault();
   const btn = e.target.querySelector("button"), out = $("#answer");

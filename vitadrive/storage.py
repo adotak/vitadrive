@@ -34,7 +34,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.pool import NullPool
 
-from .models import Alert, SensorReading, ServiceRecord, Vehicle
+from .models import Alert, FuelLog, SensorReading, ServiceRecord, Vehicle
 
 metadata = MetaData()
 
@@ -71,6 +71,14 @@ services_t = Table(
     Column("vin", String(17), ForeignKey("vehicles.vin", ondelete="CASCADE"), nullable=False),
     Column("item", String(64), nullable=False),
     Column("performed_on", String(10), nullable=False),
+    Column("odometer_km", Float, nullable=False),
+    Column("data", Text, nullable=False),
+)
+fuel_logs_t = Table(
+    "fuel_logs", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("vin", String(17), ForeignKey("vehicles.vin", ondelete="CASCADE"), nullable=False, index=True),
+    Column("filled_on", String(10), nullable=False),
     Column("odometer_km", Float, nullable=False),
     Column("data", Text, nullable=False),
 )
@@ -167,7 +175,7 @@ class Store:
 
     def delete_vehicle(self, vin: str) -> None:
         with self.transaction() as c:
-            for t in (readings_t, alerts_t, services_t):
+            for t in (readings_t, alerts_t, services_t, fuel_logs_t):
                 c.execute(t.delete().where(t.c.vin == vin))
             c.execute(vehicles_t.delete().where(vehicles_t.c.vin == vin))
 
@@ -248,6 +256,26 @@ class Store:
                 odometer_km=record.odometer_km, data=record.model_dump_json(exclude={"id"}),
             ))
         return record.model_copy(update={"id": result.inserted_primary_key[0]})
+
+    def add_fuel_log(self, log: FuelLog) -> FuelLog:
+        with self.transaction() as c:
+            result = c.execute(insert(fuel_logs_t).values(
+                vin=log.vin, filled_on=log.filled_on.isoformat(), odometer_km=log.odometer_km,
+                data=log.model_dump_json(exclude={"id"}),
+            ))
+        return log.model_copy(update={"id": result.inserted_primary_key[0]})
+
+    def fuel_logs(self, vin: str) -> list[FuelLog]:
+        q = (select(fuel_logs_t.c.id, fuel_logs_t.c.data).where(fuel_logs_t.c.vin == vin)
+             .order_by(fuel_logs_t.c.filled_on.desc(), fuel_logs_t.c.odometer_km.desc(), fuel_logs_t.c.id.desc()))
+        with self.transaction() as c:
+            rows = c.execute(q).all()
+        return [FuelLog.model_validate_json(d).model_copy(update={"id": i}) for i, d in rows]
+
+    def delete_fuel_log(self, vin: str, log_id: int) -> bool:
+        with self.transaction() as c:
+            q = fuel_logs_t.delete().where(fuel_logs_t.c.id == log_id, fuel_logs_t.c.vin == vin)
+            return c.execute(q).rowcount > 0
 
     # push subscriptions (one row per browser/device that turned alerts on)
     def save_push_subscription(self, owner_id: str, subscription: dict) -> None:
