@@ -11,10 +11,19 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, assistant, nearby, push, webinfo
+from . import __version__, assistant, costs, nearby, push, webinfo
 from .auth import AuthError, ClerkAuth
 from .demo import DEMO_VEHICLES, seed_vehicle
-from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, ServiceRecord, Vehicle
+from .models import (
+    Alert,
+    CostSummary,
+    FuelLog,
+    MaintenanceForecast,
+    RangeEstimate,
+    SensorReading,
+    ServiceRecord,
+    Vehicle,
+)
 from .service import HealthReport, UnknownVehicle, VitaDrive
 from .storage import Store
 
@@ -39,6 +48,14 @@ class ServiceIn(BaseModel):
     cost: float | None = None
     shop: str | None = None
     notes: str | None = None
+
+
+class FuelIn(BaseModel):
+    filled_on: date
+    odometer_km: float = Field(ge=0)
+    amount: float = Field(gt=0, le=2000)
+    cost: float = Field(ge=0, le=100_000)
+    station: str | None = Field(default=None, max_length=120)
 
 
 class ApiKeyOut(BaseModel):
@@ -207,6 +224,23 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
                     if alert.metric.startswith(related):
                         vd.store.acknowledge_alert(alert.id)
         return record
+
+    @app.get("/api/vehicles/{vin}/fuel", response_model=list[FuelLog])
+    def fuel_logs(vin: str = Depends(owned)):
+        return vd.store.fuel_logs(vin)
+
+    @app.post("/api/vehicles/{vin}/fuel", response_model=FuelLog, status_code=201)
+    def add_fuel_log(body: FuelIn, vin: str = Depends(owned)):
+        return vd.store.add_fuel_log(FuelLog(vin=vin, **body.model_dump()))
+
+    @app.delete("/api/vehicles/{vin}/fuel/{log_id}", status_code=204)
+    def delete_fuel_log(log_id: int, vin: str = Depends(owned)):
+        if not vd.store.delete_fuel_log(vin, log_id):
+            raise HTTPException(404, "Fill-up not found")
+
+    @app.get("/api/vehicles/{vin}/costs", response_model=CostSummary)
+    def cost_summary(vin: str = Depends(owned)):
+        return costs.summarize(vd.store.get_vehicle(vin), vd.store.fuel_logs(vin))
 
     @app.get("/api/vehicles/{vin}/maintenance", response_model=list[MaintenanceForecast])
     def maintenance(vin: str = Depends(owned)):

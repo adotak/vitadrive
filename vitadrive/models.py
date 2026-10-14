@@ -94,6 +94,33 @@ class ServiceRecord(BaseModel):
     notes: Optional[str] = None
 
 
+class FuelLog(BaseModel):
+    """One fill-up (litres) or charge (kWh) and what it cost."""
+    id: Optional[int] = None
+    vin: str
+    filled_on: date
+    odometer_km: float = Field(ge=0)
+    amount: float = Field(gt=0, le=2000, description="Litres for fuel, kWh for charging")
+    cost: float = Field(ge=0, le=100_000)
+    station: Optional[str] = Field(default=None, max_length=120)
+
+
+class MonthCost(BaseModel):
+    month: str  # YYYY-MM
+    cost: float
+
+
+class CostSummary(BaseModel):
+    unit: str  # "L" or "kWh"
+    fills: int
+    total_cost: float
+    avg_price_per_unit: Optional[float]
+    cost_per_km: Optional[float]
+    consumption_per_100km: Optional[float]
+    this_month_cost: float
+    months: list[MonthCost]
+
+
 class MaintenanceForecast(BaseModel):
     item: str
     label: str
