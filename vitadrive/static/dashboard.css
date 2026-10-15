@@ -309,9 +309,10 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
   .mobile-brand { grid-area: brand; display: block; margin-right: auto; color: var(--forest); font: 600 21px var(--display); letter-spacing: -1px; text-decoration: none; }
   .mobile-brand span { color: #63864d; }
   header select { grid-area: vehicle; width: 100%; max-width: none; padding: 6px 9px; height: 30px; }
-  header .alerts-menu { grid-area: alerts; }
+  header .alerts-menu { grid-column: 2 / 4; grid-row: 1; justify-self: start; max-width: calc(100% - 38px); }
+  #alertsBtn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   #apiKeyBtn { grid-area: key; }
-  #demoBtn { grid-area: demo; }
+  #demoBtn { grid-area: demo; max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
   #userButton { grid-area: user; justify-self: end; }
   header > span { display: none; }
   header button { font-size: 10px; padding: 6px 8px; }
