@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from html.parser import HTMLParser
 
 import pytest
 from fastapi.testclient import TestClient
@@ -146,3 +147,37 @@ def test_installable_app_assets(tmp_path):
         assert client.get(icon["src"]).status_code == 200
     assert client.get("/favicon.ico").headers["content-type"] == "image/png"
     assert client.get("/nope").json() == {"detail": "Not Found"}
+
+
+def test_dashboard_typography_assets(tmp_path):
+    client = TestClient(create_app(str(tmp_path / "typography.db")))
+    html = client.get("/").text
+    css = client.get("/static/dashboard.css")
+    assert css.status_code == 200 and css.headers["content-type"].startswith("text/css")
+    assert 'href="/static/dashboard.css"' in html
+    for font in ("manrope-latin", "space-grotesk-latin"):
+        path = f"/static/fonts/{font}.woff2"
+        assert path in html and path in css.text
+        response = client.get(path)
+        assert response.status_code == 200 and response.content.startswith(b"wOF2")
+
+
+def test_dashboard_navigation_has_unique_targets(tmp_path):
+    class DashboardParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.ids = []
+            self.targets = []
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if "id" in attrs:
+                self.ids.append(attrs["id"])
+            if tag == "a" and attrs.get("href", "").startswith("#"):
+                self.targets.append(attrs["href"][1:])
+
+    client = TestClient(create_app(str(tmp_path / "navigation.db")))
+    parser = DashboardParser()
+    parser.feed(client.get("/").text)
+    assert len(parser.ids) == len(set(parser.ids))
+    assert parser.targets and set(parser.targets) <= set(parser.ids)
