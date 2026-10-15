@@ -5,183 +5,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VitaDrive</title>
 <meta name="description" content="Car vitals monitoring, warnings and predicted maintenance dates.">
-<meta name="theme-color" content="#0e1116">
+<meta name="theme-color" content="#173e35">
 <link rel="icon" type="image/png" href="/static/icon-192.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<style>
-  :root { --bg:#0e1116; --card:#161b22; --line:#2a313c; --fg:#e6edf3; --mute:#8b949e;
-          --ok:#3fb950; --info:#58a6ff; --warning:#d29922; --critical:#f85149; }
-  * { box-sizing:border-box; }
-  [hidden] { display:none !important; }
-  body { margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-  header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:12px; padding:12px 28px;
-    background:#0e1116e6; backdrop-filter:blur(12px); border-bottom:1px solid var(--line); }
-  header h1 { font-size:19px; margin:0 8px 0 0; letter-spacing:.3px; }
-  header h1 span { color:var(--ok); }
-  select { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:7px 14px; font:inherit; }
-  main { max-width:1240px; margin:0 auto; padding:24px 28px 56px; display:grid; gap:18px; grid-template-columns:repeat(12,1fr); }
-  .card { background:linear-gradient(180deg,#171c24,#12161d); border:1px solid var(--line); border-radius:16px; padding:20px 22px;
-    grid-column:span 6; min-width:0; }
-  .span-7 { grid-column:span 7; } .span-5 { grid-column:span 5; } .wide { grid-column:1/-1; }
-  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--mute); margin:0 0 14px; font-weight:600; }
-  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; text-transform:capitalize; }
-  .ok{background:#3fb95022;color:var(--ok)} .info{background:#58a6ff22;color:var(--info)}
-  .warning{background:#d2992222;color:var(--warning)} .critical{background:#f8514922;color:var(--critical)}
-  .dot { width:9px; height:9px; border-radius:50%; flex:none; background:var(--c,var(--ok)); box-shadow:0 0 8px var(--c,var(--ok)); }
-  .mute { color:var(--mute); } .small { font-size:12px; }
-  table { width:100%; border-collapse:collapse; } td,th { text-align:left; padding:9px 6px; border-bottom:1px solid #222832; }
-  th { color:var(--mute); font-weight:500; font-size:12px; }
-  button { background:#238636; color:#fff; border:0; border-radius:8px; padding:7px 14px; cursor:pointer; font:inherit; }
-  button.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
-  .alerts-menu { position:relative; } #alertsBtn .dot { display:inline-block; margin-right:8px; vertical-align:middle; }
-  .pop { position:absolute; right:0; top:calc(100% + 6px); z-index:6; min-width:180px; display:flex; flex-direction:column;
-    padding:6px 14px; background:#171c24; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 30px #0009; }
-  .pop[hidden] { display:none; } .pop .link { text-align:left; }
-  button.link { background:none; border:0; color:var(--info); padding:6px 0; }
-  button:disabled { opacity:.6; cursor:default; }
-  .calendar-export { display:flex; align-items:center; flex-wrap:wrap; gap:10px 16px; margin-top:16px;
-    padding:14px; border:1px solid var(--line); border-radius:10px; background:#0e111655; }
-  .calendar-export .t { flex:1; min-width:150px; }
-  .calendar-export details { flex-basis:100%; }
-  .calendar-export summary { cursor:pointer; color:var(--info); }
-  .calendar-export p { margin:6px 0 0; }
-  form { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  input { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 10px; width:130px; font:inherit; }
-  .hero-card { display:flex; align-items:center; justify-content:space-between; gap:28px; padding:26px 28px; position:relative; overflow:hidden; }
-  .hero-card > :not(.hero-photo) { position:relative; z-index:1; }
-  .hero-photo { position:absolute; inset:0 0 0 auto; width:62%; background:center/cover no-repeat; opacity:0; transition:opacity .6s;
-    -webkit-mask-image:linear-gradient(90deg,transparent,#000 55%); mask-image:linear-gradient(90deg,transparent,#000 55%); }
-  .hero-photo.on { opacity:.5; }
-  .hero-photo::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,#14181f 0,transparent 40%,#12161d99); }
-  .photo-credit { position:absolute; right:12px; bottom:8px; z-index:1; font-size:10px; color:#8b949eaa; text-decoration:none; }
-  .photo-credit:hover { color:var(--fg); }
-  .hero-card .gauge-wrap { border-radius:50%; background:radial-gradient(circle,#0e1116e6 58%,#0e111600 71%); }
-  .hero-card .range-note { color:#c9d1d9; text-shadow:0 1px 6px #000; }
-  #recalls a { color:var(--info); }
-  @media (max-width:860px) { .hero-photo { width:100%; } .hero-photo.on { opacity:.28; } }
-  .recall-sum { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-  .recall-sum b { font-weight:600; }
-  .issue .body.col { flex-direction:column; gap:8px; } .issue .body.col p { margin:0; }
-  .flags { display:flex; flex-wrap:wrap; gap:6px; }
-  .hero-main { display:flex; align-items:center; gap:22px; min-width:0; }
-  .ring { width:86px; height:86px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:36px; font-weight:700;
-    color:var(--c); border:3px solid var(--c); box-shadow:0 0 34px -8px var(--c), inset 0 0 24px -12px var(--c); }
-  .car { color:var(--mute); font-size:13px; }
-  .headline { font-size:30px; font-weight:700; letter-spacing:-.5px; margin:2px 0 4px; }
-  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  .chip { display:inline-flex; align-items:center; gap:7px; padding:5px 11px; border-radius:999px; background:#ffffff0a;
-    border:1px solid var(--line); font-size:12px; color:#c9d1d9; }
-  button.chip { cursor:pointer; }
-  .gauge-wrap { position:relative; width:132px; height:132px; flex:none; text-align:center; }
-  .gauge { width:132px; height:132px; transform:rotate(-90deg); }
-  .gauge circle { fill:none; stroke-width:9; stroke-linecap:round; } .gauge .track { stroke:#222832; }
-  .gauge-label { position:absolute; inset:0; display:grid; place-content:center; }
-  .gauge-label b { font-size:28px; line-height:1; } .gauge-label span { font-size:11px; color:var(--mute); }
-  .range-note { text-align:center; margin-top:6px; }
-  .issue { border-bottom:1px solid #222832; } .issue:last-child { border-bottom:0; }
-  .issue summary { list-style:none; display:flex; align-items:center; gap:12px; padding:11px 2px; cursor:pointer; }
-  .issue summary::-webkit-details-marker { display:none; }
-  .issue summary .t { flex:1; font-weight:500; } .issue summary::after { content:"›"; color:var(--mute); font-size:18px; transition:transform .2s; }
-  .issue[open] summary::after { transform:rotate(90deg); }
-  .issue .body { padding:0 2px 12px 21px; color:#c9d1d9; display:flex; gap:12px; align-items:flex-start; justify-content:space-between; }
-  .allgood { display:flex; align-items:center; gap:12px; padding:8px 0; color:#c9d1d9; }
-  .systems { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
-  .sys { border:1px solid #222832; border-radius:12px; padding:14px 16px; background:#0e111666; }
-  .sys-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:600; }
-  .sys-head .state { margin-left:auto; font-size:12px; font-weight:500; color:var(--c); }
-  .row { display:flex; justify-content:space-between; gap:8px; padding:4px 0; font-size:13px; }
-  .row .v { font-weight:600; font-variant-numeric:tabular-nums; } .row .v small { color:var(--mute); font-weight:400; }
-  .tires { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
-  .tire { border:1px solid #222832; border-radius:10px; padding:6px 10px; }
-  .tire b { display:block; font-variant-numeric:tabular-nums; } .tire b small { color:var(--mute); font-weight:400; }
-  .svc { display:flex; align-items:center; gap:14px; padding:11px 2px; border-bottom:1px solid #222832; }
-  .svc .t { flex:1; min-width:0; } .svc .t div:first-child { font-weight:500; }
-  [data-collapsed] .extra { display:none; }
-  .cost-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:32px; align-items:end; }
-  .kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px 20px; }
-  .kpi b { display:block; font-size:20px; font-variant-numeric:tabular-nums; } .kpi span { color:var(--mute); font-size:12px; }
-  .kpi.big { grid-column:1/-1; } .kpi.big b { font-size:36px; color:var(--ok); letter-spacing:-.5px; }
-  .bars { display:flex; align-items:flex-end; gap:10px; height:150px; }
-  .bar { flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:6px; font-size:11px; color:var(--mute); }
-  .bar i { width:100%; max-width:48px; min-height:3px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#3fb950,#238636); }
-  .bar.now i { background:linear-gradient(180deg,#58a6ff,#1f6feb); } .bar.now { color:var(--fg); }
-  @media (max-width:760px) { .cost-grid { grid-template-columns:1fr; gap:20px; } .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-  details.logsvc { margin-top:14px; } details.logsvc summary { cursor:pointer; color:var(--info); }
-  .tabs { display:flex; gap:6px; margin-bottom:10px; }
-  .tabs button { background:transparent; color:var(--mute); border:1px solid transparent; padding:5px 12px; border-radius:999px; }
-  .tabs button.on { color:var(--fg); border-color:var(--line); background:#ffffff0a; }
-  #answer { margin-top:12px; line-height:1.55; }
-  @media (max-width:900px) {
-    header { padding:10px 14px; flex-wrap:wrap; } main { padding:16px 12px 40px; gap:14px; }
-    .card, .span-7, .span-5 { grid-column:1/-1; } .hero-card { flex-direction:column; align-items:flex-start; }
-    .gauge-wrap { align-self:center; } .headline { font-size:24px; } .hide-sm { display:none; }
-    header select { order:5; flex:1 1 100%; } header > span { display:none; } header h1 { margin-right:auto; }
-    .ring { width:60px; height:60px; font-size:26px; } .hero-main { gap:16px; } }
-  #landing { position:relative; min-height:100vh; }
-  #landing .hero { position:relative; min-height:100vh; display:grid; grid-template-columns:1.1fr 1fr; align-items:center;
-    gap:48px; padding:48px 6vw; overflow:hidden; }
-  #landing video, #landing .shade { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
-  #landing .shade { background:linear-gradient(90deg,#0e1116f2 0%,#0e1116b3 45%,#0e111666 100%),
-    linear-gradient(0deg,#0e1116 0%,transparent 30%); }
-  #landing .hero > :not(video):not(.shade) { position:relative; z-index:1; }
-  #landing .brand { font-size:22px; font-weight:700; letter-spacing:.5px; margin-bottom:56px; }
-  #landing .brand span, #landing .tagline em { color:var(--ok); font-style:normal; }
-  #landing .tagline { font-size:clamp(34px,4.6vw,64px); line-height:1.05; margin:0 0 18px; letter-spacing:-1px; }
-  #landing .lead { font-size:18px; color:#c9d1d9; max-width:560px; margin:0 0 28px; }
-  #landing ul { list-style:none; padding:0; margin:0; display:grid; gap:10px; color:#c9d1d9; font-size:15px; }
-  #landing li::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--ok);
-    margin-right:12px; box-shadow:0 0 10px var(--ok); }
-  #signin { justify-self:center; }
-  .gallery { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; padding:24px 6vw 64px; }
-  .gallery figure { position:relative; margin:0; border-radius:14px; overflow:hidden; aspect-ratio:16/9;
-    border:1px solid var(--line); background:var(--card); }
-  .gallery img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .6s ease; }
-  .gallery figure:hover img { transform:scale(1.06); }
-  .gallery figcaption { position:absolute; inset:auto 0 0 0; padding:28px 16px 14px;
-    background:linear-gradient(0deg,#0e1116e6,transparent); }
-  .gallery b { display:block; font-size:15px; } .gallery small { color:#c9d1d9; }
-  .gallery-title { padding:48px 6vw 0; font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--mute); }
-  @media (max-width:900px) { #landing .hero { grid-template-columns:1fr; } #landing .brand { margin-bottom:24px; }
-    .gallery { grid-template-columns:1fr 1fr; } }
-  @media (max-width:560px) { .gallery { grid-template-columns:1fr; } }
-  .near-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; }
-  .near-top .chips { margin-top:0; }
-  .near-loc { display:flex; gap:8px; margin:0; } .near-loc input { width:170px; }
-  .chip.kind { cursor:pointer; } .chip.kind:hover { border-color:#3d4652; }
-  .chip.kind.on { border-color:var(--ok); color:var(--fg); background:#3fb9501a; }
-  .chip.kind.need::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--warning); box-shadow:0 0 6px var(--warning); }
-  #nearWhy { margin-top:10px; }
-  .near-body { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:18px; margin-top:14px; }
-  #nearMap { min-height:340px; border-radius:12px; border:1px solid var(--line); background:#0b0e13; z-index:0; }
-  .place { display:flex; gap:12px; align-items:flex-start; padding:10px 6px; border-bottom:1px solid var(--line); cursor:pointer; border-radius:8px; }
-  .place:hover { background:#ffffff06; } .place:last-of-type { border-bottom:0; }
-  .place .num, .pin { width:24px; height:24px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:700;
-    background:var(--ok); color:#0e1116; }
-  .pin { border:2px solid #0e1116; box-shadow:0 0 10px #3fb95099; }
-  .place .t { flex:1; min-width:0; } .place .t b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
-  .place .acts { display:flex; gap:6px; margin-top:6px; }
-  .place .acts a { color:var(--info); text-decoration:none; font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; }
-  .place .km { color:var(--fg); font-weight:600; white-space:nowrap; }
-  .leaflet-container { font:inherit; background:#0b0e13; }
-  .leaflet-tile-pane { filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.6); }
-  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--card); color:var(--fg); border:1px solid var(--line); }
-  .leaflet-control-attribution { background:#0e1116cc !important; color:var(--mute); } .leaflet-control-attribution a { color:var(--info); }
-  @media (max-width: 860px) { .near-body { grid-template-columns:minmax(0,1fr); } #nearMap { min-height:260px; } .near-loc input { width:auto; flex:1; } .near-loc { width:100%; } }
-</style>
+<link rel="preload" href="/static/fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-service" viewBox="0 0 24 24"><path d="m14 6 4 4m-11 3-4 4a2.8 2.8 0 0 0 4 4l6-6a6 6 0 0 0 8-8l-4 4-4-4 4-4a6 6 0 0 0-8 8Z"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M20 7H5a2 2 0 0 1 0-4h13v4M3 5v14a2 2 0 0 0 2 2h15V7M20 11h-6v6h6"/><path d="M16 14h1"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
+  <symbol id="i-road" viewBox="0 0 24 24"><path d="m5 21 4-18m10 18L15 3M12 4v3m0 4v3m0 4v3"/></symbol>
+</defs></svg>
+<a class="skip-link" href="#main">Skip to dashboard</a>
+<aside class="sidebar" id="sidebar" aria-label="Dashboard navigation" hidden>
+  <a class="brand" href="#overview" aria-label="VitaDrive overview"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg></span>VitaDrive<span class="brand-dot">.</span></a>
+  <div class="nav-label">YOUR GARAGE</div>
+  <nav class="nav-links">
+    <a href="#overview" class="active" aria-current="location"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>Overview</a>
+    <a href="#maintenanceCard"><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg>Maintenance</a>
+    <a href="#systemsCard"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg>Vehicle health</a>
+    <a href="#costCard"><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg>Running costs</a>
+    <a href="#historyCard"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>Service history</a>
+    <a href="#nearCard"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>Nearby help</a>
+  </nav>
+  <div class="sidebar-note">
+    <svg class="icon" aria-hidden="true"><use href="#i-road"/></svg>
+    <p>A little care.<br><strong>A longer journey.</strong></p>
+    <span>Your companion for every kilometre.</span>
+  </div>
+  <div class="sidebar-footer">VITADRIVE <span>Made for the road.</span></div>
+</aside>
 <header>
-  <h1>Vita<span>Drive</span></h1>
+  <a class="mobile-brand" href="#overview">VitaDrive<span>.</span></a>
+  <div class="breadcrumb">My garage <span>/</span> <b id="currentSection">Overview</b></div>
   <select id="vehicle" aria-label="Vehicle"></select>
   <span style="flex:1"></span>
   <div class="alerts-menu"><button class="ghost" id="alertsBtn" hidden>Turn on alerts</button>
     <div class="pop" id="alertsPop" hidden><button class="link" id="pushTest">Send a test alert</button>
       <button class="link" id="pushOff">Turn off alerts</button></div></div>
   <button class="ghost" id="apiKeyBtn" hidden>API key</button>
-  <button class="ghost" id="demoBtn">Add demo cars</button>
+  <button class="ghost" id="demoBtn"><span aria-hidden="true">＋</span> Add demo cars</button>
   <div id="userButton"></div>
 </header>
 <div id="landing" hidden>
@@ -236,72 +110,54 @@
   <p class="mute">Register a car, then send readings from its telematics gateway or OBD-II device using its API key.
     Or click <b>Add demo cars</b> above to explore with simulated data.</p>
   <form id="vehForm">
-    <input name="vin" placeholder="VIN" required maxlength="17">
-    <input name="make" placeholder="Make" required>
-    <input name="model" placeholder="Model" required>
-    <input name="year" type="number" placeholder="Year" required>
-    <select name="powertrain"><option value="ice">Petrol/Diesel</option><option value="hybrid">Hybrid</option>
+    <input name="vin" placeholder="VIN" aria-label="VIN" required maxlength="17">
+    <input name="make" placeholder="Make" aria-label="Make" required>
+    <input name="model" placeholder="Model" aria-label="Model" required>
+    <input name="year" type="number" placeholder="Year" aria-label="Year" required>
+    <select name="powertrain" aria-label="Powertrain"><option value="ice">Petrol/Diesel</option><option value="hybrid">Hybrid</option>
       <option value="ev">Electric</option></select>
-    <input name="tank_capacity_l" type="number" step="0.1" placeholder="Tank (L)">
-    <input name="battery_capacity_kwh" type="number" step="0.1" placeholder="Battery (kWh)">
+    <input name="tank_capacity_l" type="number" step="0.1" placeholder="Tank (L)" aria-label="Tank (L)">
+    <input name="battery_capacity_kwh" type="number" step="0.1" placeholder="Battery (kWh)" aria-label="Battery (kWh)">
     <button>Add vehicle</button>
   </form>
 </section>
-<main id="main" hidden>
-  <section class="card wide hero-card">
+<main id="main" hidden tabindex="-1">
+  <div class="page-intro wide" id="overview">
+    <div><div class="eyebrow">LESS GUESSWORK. MORE GOOD DRIVES.</div>
+      <h1>Your car, at a glance.</h1><p class="mute">A clearer picture of your vehicle. A little more peace of mind.</p></div>
+    <div class="page-date"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span id="today"></span></div>
+  </div>
+  <section class="card hero-card span-8">
+    <div class="hero-overline"><span class="hero-kicker">YOUR VEHICLE</span><span class="reading-label">Refreshes every 15s</span></div>
     <div class="hero-main">
-      <div class="ring" id="statusRing"></div>
       <div>
-        <div class="car" id="carName"></div>
-        <div class="headline" id="status"></div>
+        <h2 class="car" id="carName"></h2>
+        <div class="hero-status"><span class="ring" id="statusRing"></span>
+        <div class="headline" id="status"></div></div>
         <div class="mute" id="summary"></div>
-        <div class="chips"><span class="chip" id="odo"></span><span class="chip" id="aiCheck" hidden></span></div>
+        <div class="chips"><span class="chip" id="powertrain"></span><span class="chip" id="aiCheck" hidden></span></div>
       </div>
     </div>
-    <div id="range"></div>
+    <div class="hero-updated" id="updatedStamp"></div>
     <div class="hero-photo" id="heroPhoto" aria-hidden="true"></div>
     <a class="photo-credit" id="photoCredit" target="_blank" rel="noopener" hidden>Photo: Wikipedia</a>
   </section>
-  <section class="card span-7" id="attention">
-    <h2>Needs attention</h2>
+  <section class="card range-card span-4" aria-labelledby="rangeTitle">
+    <div class="section-heading"><h2 id="rangeTitle">Estimated range</h2><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg></div>
+    <div id="range"></div>
+    <p class="small mute range-caption">An estimate, not a guarantee. Plan a little extra.</p>
+  </section>
+  <div class="glance-grid wide">
+    <div class="glance-item"><span class="metric-icon"><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg></span><div><span class="metric-label">Total distance</span><div class="metric-value" id="odo">—</div></div></div>
+    <div class="glance-item"><span class="metric-icon"><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg></span><div><span class="metric-label">Next on your schedule</span><div class="metric-value compact" id="nextService">—</div><span class="small mute" id="nextDue"></span></div></div>
+    <a class="glance-item" href="#attention"><span class="metric-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span><div><span class="metric-label">Attention needed</span><div class="metric-value" id="attentionCount">—</div></div><svg class="icon metric-arrow"><use href="#i-arrow"/></svg></a>
+  </div>
+  <section class="card span-6" id="attention">
+    <div class="section-heading"><h2>Needs attention</h2><span class="section-tag">HEALTH CHECK</span></div>
     <div id="alerts"></div>
   </section>
-  <section class="card span-5" id="recallCard">
-    <h2>Safety recalls</h2>
-    <div id="recalls"><span class="mute">Checking the recall database…</span></div>
-  </section>
-  <section class="card span-5" id="askCard" hidden>
-    <h2>Ask VitaDrive</h2>
-    <form id="askForm" style="display:flex;gap:8px;margin:0">
-      <input name="q" maxlength="500" required placeholder="Ask anything about this car" style="flex:1;width:auto">
-      <button>Ask</button>
-    </form>
-    <div class="chips" id="askChips">
-      <button type="button" class="chip">What needs attention?</button>
-      <button type="button" class="chip">When is my next service?</button>
-      <button type="button" class="chip">Is it safe for a long trip?</button>
-    </div>
-    <div id="answer"></div>
-  </section>
-  <section class="card wide" id="nearCard">
-    <h2>Nearby help</h2>
-    <div class="near-top">
-      <div class="chips" id="nearKinds"></div>
-      <form class="near-loc" id="nearForm">
-        <button type="button" class="ghost" id="nearGeo">Use my location</button>
-        <input name="q" minlength="2" maxlength="200" required placeholder="or city / postcode">
-        <button>Search</button>
-      </form>
-    </div>
-    <div class="mute small" id="nearWhy"></div>
-    <div class="near-body" id="nearBody" hidden><div id="nearMap"></div><div id="nearList"></div></div>
-  </section>
-  <section class="card wide">
-    <h2>Systems</h2>
-    <div class="systems" id="vitals"></div>
-  </section>
-  <section class="card span-7">
-    <h2>Upcoming maintenance</h2>
+  <section class="card span-6" id="maintenanceCard">
+    <div class="section-heading"><h2>Upcoming maintenance</h2><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg></div>
     <div id="maint"></div>
     <div class="calendar-export">
       <div class="t"><div>Calendar reminders</div><div class="mute small">Google Calendar, Apple Calendar &amp; Outlook</div></div>
@@ -316,36 +172,70 @@
     </div>
     <details class="logsvc" id="logSvc"><summary>Log a service</summary>
       <form id="svcForm">
-        <select name="item" id="svcItem"></select>
-        <input name="performed_on" type="date" required>
-        <input name="odometer_km" type="number" step="0.1" placeholder="Odometer km" required>
-        <input name="cost" type="number" step="0.01" placeholder="Cost">
-        <input name="shop" placeholder="Shop">
-        <input name="notes" placeholder="Notes" style="width:200px">
+        <select name="item" id="svcItem" aria-label="Service item"></select>
+        <input name="performed_on" type="date" aria-label="Service date" required>
+        <input name="odometer_km" type="number" step="0.1" placeholder="Odometer km" aria-label="Odometer km" required>
+        <input name="cost" type="number" step="0.01" placeholder="Cost" aria-label="Cost">
+        <input name="shop" placeholder="Shop" aria-label="Shop">
+        <input name="notes" placeholder="Notes" aria-label="Notes" style="width:200px">
         <button>Save</button>
       </form>
     </details>
   </section>
-  <section class="card span-5">
-    <h2>History</h2>
+  <section class="card wide" id="systemsCard">
+    <div class="section-heading"><div><h2>Under the hood</h2><p class="section-description">The essentials first. Open a system for all its readings.</p></div><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg></div>
+    <div class="systems" id="vitals"></div>
+  </section>
+  <section class="card span-6" id="historyCard">
+    <div class="section-heading"><h2>Your service history</h2><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></div>
     <div class="tabs"><button class="on" data-tab="services">Services</button><button data-tab="log">Alert log</button></div>
     <div id="services"></div>
     <div id="log" hidden></div>
   </section>
+  <section class="card span-6" id="recallCard">
+    <div class="section-heading"><h2>Safety recalls</h2><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
+    <div id="recalls"><span class="mute">Checking the recall database…</span></div>
+  </section>
   <section class="card wide" id="costCard">
-    <h2 id="costTitle">Fuel costs</h2>
+    <div class="section-heading"><div><h2 id="costTitle">Fuel costs</h2><p class="section-description">Keep an eye on what keeps you moving.</p></div><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg></div>
     <div class="cost-grid"><div class="kpis" id="costKpis"></div><div class="bars" id="costBars"></div></div>
     <details class="logsvc" id="logFuel"><summary>Log a fill-up</summary>
       <form id="fuelForm">
-        <input name="filled_on" type="date" required>
-        <input name="odometer_km" type="number" step="0.1" min="0" placeholder="Odometer km" required>
-        <input name="amount" type="number" step="0.01" min="0.01" placeholder="Litres" required>
-        <input name="cost" type="number" step="0.01" min="0" placeholder="Total paid" required>
-        <input name="station" maxlength="120" placeholder="Station">
+        <input name="filled_on" type="date" aria-label="Fill-up or charging date" required>
+        <input name="odometer_km" type="number" step="0.1" min="0" placeholder="Odometer km" aria-label="Odometer km" required>
+        <input name="amount" type="number" step="0.01" min="0.01" placeholder="Litres" aria-label="Litres" required>
+        <input name="cost" type="number" step="0.01" min="0" placeholder="Total paid" aria-label="Total paid" required>
+        <input name="station" maxlength="120" placeholder="Station" aria-label="Station">
         <button>Save</button>
       </form>
     </details>
     <details class="logsvc"><summary id="fuelListTitle">Fill-up history</summary><div id="fuelList"></div></details>
+  </section>
+  <section class="card span-5" id="askCard" hidden>
+    <h2>Ask VitaDrive</h2>
+    <form id="askForm" style="display:flex;gap:8px;margin:0">
+      <input name="q" maxlength="500" required placeholder="Ask anything about this car" aria-label="Ask anything about this car" style="flex:1;width:auto">
+      <button>Ask</button>
+    </form>
+    <div class="chips" id="askChips">
+      <button type="button" class="chip">What needs attention?</button>
+      <button type="button" class="chip">When is my next service?</button>
+      <button type="button" class="chip">Is it safe for a long trip?</button>
+    </div>
+    <div id="answer"></div>
+  </section>
+  <section class="card wide" id="nearCard">
+    <div class="section-heading"><div><h2>Good help, close by.</h2><p class="section-description">Find the right stop for your next step.</p></div><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg></div>
+    <div class="near-top">
+      <div class="chips" id="nearKinds"></div>
+      <form class="near-loc" id="nearForm">
+        <button type="button" class="ghost" id="nearGeo">Use my location</button>
+        <input name="q" minlength="2" maxlength="200" required placeholder="or city / postcode" aria-label="or city / postcode">
+        <button>Search</button>
+      </form>
+    </div>
+    <div class="mute small" id="nearWhy"></div>
+    <div class="near-body" id="nearBody" hidden><div id="nearMap"></div><div id="nearList"></div></div>
   </section>
 </main>
 <script>
@@ -416,6 +306,7 @@ async function loadVehicles(select) {
   $("#vehicle").value = vin || "";
   $("#main").hidden = $("#vehicle").hidden = $("#apiKeyBtn").hidden = !vin;
   $("#empty").hidden = !!vin;
+  $(".nav-links").hidden = $(".nav-label").hidden = !vin;
   if (vin) refresh();
 }
 
@@ -453,12 +344,15 @@ async function boot() {
       document.querySelector("header").hidden = true; $("main").hidden = true;
       $("#landing").hidden = false;
       startHeroVideo();
-      Clerk.mountSignIn($("#signin"), {appearance: {variables: {colorPrimary: "#238636"}}});
+      Clerk.mountSignIn($("#signin"), {appearance: {variables: {colorPrimary: "#173e35", fontFamily: "Manrope, sans-serif"}}});
       Clerk.addListener(({user}) => user && location.reload());
       return;
     }
     Clerk.mountUserButton($("#userButton"));
   }
+  document.body.classList.add("dashboard");
+  $("#sidebar").hidden = false;
+  $("#today").textContent = new Date().toLocaleDateString(undefined, {weekday: "short", day: "numeric", month: "short", year: "numeric"});
   initPush(cfg);
   await loadVehicles(new URLSearchParams(location.search).get("vin"));
   setInterval(() => vin && refresh(), 15000);
@@ -486,7 +380,12 @@ async function refresh() {
   $("#status").style.color = `var(--${rep.status})`;
   $("#summary").textContent = [groups.length ? `${groups.length} ${groups.length === 1 ? "item needs" : "items need"} attention` : "No warnings",
     next && `next service: ${next.label.toLowerCase()} ${dueText(next)}`].filter(Boolean).join(" · ");
-  $("#odo").textContent = lr ? `${Math.round(lr.odometer_km).toLocaleString()} km · updated ${new Date(lr.timestamp).toLocaleDateString()}` : "No readings yet";
+  $("#odo").innerHTML = lr ? `${Math.round(lr.odometer_km).toLocaleString()} <small>km</small>` : "No readings yet";
+  $("#powertrain").textContent = {ice: "Petrol / diesel", hybrid: "Hybrid", ev: "Electric"}[v.powertrain] || v.powertrain;
+  $("#updatedStamp").textContent = lr ? `Last reading · ${new Date(lr.timestamp).toLocaleString()}` : "Waiting for your first reading";
+  $("#nextService").textContent = next ? next.label : "No forecast yet";
+  $("#nextDue").textContent = next ? dueText(next) : "Add a reading to get started";
+  $("#attentionCount").innerHTML = `${groups.length} <small>${groups.length === 1 ? "item" : "items"}</small>`;
   const an = rep.anomaly;
   $("#aiCheck").hidden = !an;
   if (an) {
@@ -496,10 +395,10 @@ async function refresh() {
   }
   const r = rep.range, C = 2 * Math.PI * 52;
   $("#range").innerHTML = r ? `<div class="gauge-wrap" title="${esc(r.consumption_basis)}">
-      <svg class="gauge" viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/>
+      <svg class="gauge" aria-hidden="true" viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/>
       <circle cx="60" cy="60" r="52" style="stroke:var(--${r.status});stroke-dasharray:${C * r.level_pct / 100} ${C}"/></svg>
       <div class="gauge-label"><b>${Math.round(r.range_km)}</b><span>km range</span></div></div>
-    <div class="range-note mute small">${Math.round(r.level_pct)}% ${esc(r.energy_source)}</div>` : "";
+    <div class="range-note"><span class="dot" style="--c:var(--${r.status})"></span>${Math.round(r.level_pct)}% ${esc(r.energy_source)} remaining</div>` : `<p class="mute">Add a reading to see your estimated range.</p>`;
 
   $("#alerts").innerHTML = groups.length ? "" : `<div class="allgood"><span class="dot"></span>Nothing needs your attention right now.</div>`;
   if (groups.length) collapsible("alerts", groups.map(g => `<details class="issue"><summary><span class="dot" style="--c:var(--${g.sev})"></span>
@@ -508,6 +407,7 @@ async function refresh() {
     4, "items");
 
   const alertMetrics = new Map(rep.active_alerts.map(a => [a.metric, a.severity]));
+  const openSystems = new Set([...document.querySelectorAll("#vitals details[open]")].map(el => el.dataset.system));
   const row = k => { const s = alertMetrics.get(k) || "ok", u = VITALS.find(([m]) => m === k)[2];
     return `<div class="row"><span class="mute">${label(k)}</span><span class="v" ${s !== "ok" ? `style="color:var(--${s})"` : ""}>${lr[k]} <small>${u}</small></span></div>`; };
   $("#vitals").innerHTML = lr ? SYSTEMS.map(([name, keys]) => {
@@ -519,13 +419,13 @@ async function refresh() {
       return `<div class="tire"><span class="mute small">${label(k)}</span><b ${s !== "ok" ? `style="color:var(--${s})"` : ""}>${lr[k]} <small>kPa</small></b></div>`; };
     const body = name === "Tires" ? `<div class="tires">${tires.map(tire).join("")}</div>${present.filter(k => !tires.includes(k)).map(row).join("")}`
       : present.map(row).join("");
-    return `<div class="sys" style="--c:var(--${s})"><div class="sys-head"><span class="dot"></span>${name}<span class="state">${STATE[s]}</span></div>${body}</div>`;
+    return `<details class="sys" data-system="${name}" ${openSystems.has(name) ? "open" : ""} style="--c:var(--${s})"><summary class="sys-head"><span class="dot"></span><span>${name}</span><span class="state">${STATE[s]}</span></summary><div class="sys-body">${body}</div></details>`;
   }).join("") : `<span class="mute">No readings yet. Send one with the car's API key.</span>`;
 
   collapsible("maint", upcoming.map(m => `<div class="svc"><span class="dot" style="--c:var(--${m.status})"></span><div class="t">
     <div>${esc(m.label)}</div><div class="mute small" title="${esc(m.reason)}">${fmtDate(m.due_date)} · ${dueText(m)}${m.km_remaining == null ? ""
     : ` · ${Math.max(0, Math.round(m.km_remaining)).toLocaleString()} km left`}</div></div>
-    <button class="ghost small hide-sm" onclick="prefill('${m.item}')">Log</button></div>`), 5, "items");
+    <button class="ghost small hide-sm" onclick="prefill('${m.item}')">Log</button></div>`), 3, "items");
   $("#svcItem").innerHTML = rep.maintenance.map(m => `<option value="${m.item}">${esc(m.label)}</option>`).join("");
   collapsible("services", services.map(s => `<div class="svc"><div class="t"><div>${esc(rep.maintenance.find(m => m.item === s.item)?.label || s.item)}</div>
     <div class="mute small">${fmtDate(s.performed_on)} · ${Math.round(s.odometer_km).toLocaleString()} km${s.shop ? ` · ${esc(s.shop)}` : ""}${s.notes ? ` · ${esc(s.notes)}` : ""}</div></div>
@@ -846,6 +746,21 @@ $("#nearForm").onsubmit = async e => {
     saveLoc({lat: res.lat, lon: res.lon, label: q}); form.reset(); renderNearby(res);
   } catch (err) { if (seq === nearSeq) nearFail(err, () => form.requestSubmit()); }
 };
+let navFrame = false;
+const navLinks = [...document.querySelectorAll(".nav-links a")];
+function updateNavigation() {
+  navFrame = false;
+  const positions = navLinks.map(a => ({a, top: $(a.getAttribute("href")).getBoundingClientRect().top}));
+  const current = positions.filter(p => p.top <= 180).sort((a, b) => b.top - a.top)[0]?.a || navLinks[0];
+  for (const a of navLinks) {
+    a.classList.toggle("active", a === current);
+    if (a === current) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current");
+  }
+  $("#currentSection").textContent = current.textContent.trim();
+}
+window.addEventListener("scroll", () => {
+  if (!navFrame && !$("#main").hidden) { navFrame = true; requestAnimationFrame(updateNavigation); }
+}, {passive: true});
 boot();
 </script>
 </body>

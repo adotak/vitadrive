@@ -33,7 +33,7 @@ vitadrive = "vitadrive.cli:main"
 include = ["vitadrive*"]
 
 [tool.setuptools.package-data]
-vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*"]
+vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*", "static/fonts/*"]
 
 [tool.ruff]
 line-length = 120
