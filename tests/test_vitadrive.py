@@ -181,3 +181,31 @@ def test_dashboard_navigation_has_unique_targets(tmp_path):
     parser.feed(client.get("/").text)
     assert len(parser.ids) == len(set(parser.ids))
     assert parser.targets and set(parser.targets) <= set(parser.ids)
+
+
+def test_dashboard_sidebar_links_open_views(tmp_path):
+    class ViewParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.views = []
+            self.nav_targets = []
+            self.in_nav = False
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if "view" in attrs.get("class", "").split():
+                self.views.append(attrs["id"])
+            if tag == "nav" and "nav-links" in attrs.get("class", ""):
+                self.in_nav = True
+            if self.in_nav and tag == "a":
+                self.nav_targets.append(attrs["href"][1:])
+
+        def handle_endtag(self, tag):
+            if tag == "nav":
+                self.in_nav = False
+
+    client = TestClient(create_app(str(tmp_path / "views.db")))
+    parser = ViewParser()
+    parser.feed(client.get("/").text)
+    assert parser.nav_targets == parser.views
+    assert parser.views == ["overview", "maintenance", "health", "costs", "history", "help"]
