@@ -32,12 +32,12 @@
   <a class="brand" href="#overview" aria-label="VitaDrive overview"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg></span>VitaDrive<span class="brand-dot">.</span></a>
   <div class="nav-label">YOUR GARAGE</div>
   <nav class="nav-links">
-    <a href="#overview" class="active" aria-current="location"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>Overview</a>
-    <a href="#maintenanceCard"><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg>Maintenance</a>
-    <a href="#systemsCard"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg>Vehicle health</a>
-    <a href="#costCard"><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg>Running costs</a>
-    <a href="#historyCard"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>Service history</a>
-    <a href="#nearCard"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>Nearby help</a>
+    <a href="#overview" class="active" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>Overview</a>
+    <a href="#maintenance"><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg>Maintenance</a>
+    <a href="#health"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg>Health</a>
+    <a href="#costs"><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg>Costs</a>
+    <a href="#history"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>History</a>
+    <a href="#help"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>Nearby help</a>
   </nav>
   <div class="sidebar-note">
     <svg class="icon" aria-hidden="true"><use href="#i-road"/></svg>
@@ -122,9 +122,10 @@
   </form>
 </section>
 <main id="main" hidden tabindex="-1">
-  <div class="page-intro wide" id="overview">
+<div class="view" id="overview" data-title="Overview">
+  <div class="page-intro wide">
     <div><div class="eyebrow">LESS GUESSWORK. MORE GOOD DRIVES.</div>
-      <h1>Your car, at a glance.</h1><p class="mute">A clearer picture of your vehicle. A little more peace of mind.</p></div>
+      <h1 tabindex="-1">Your car, at a glance.</h1><p class="mute">A clearer picture of your vehicle. A little more peace of mind.</p></div>
     <div class="page-date"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span id="today"></span></div>
   </div>
   <section class="card hero-card span-8">
@@ -152,24 +153,20 @@
     <div class="glance-item"><span class="metric-icon"><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg></span><div><span class="metric-label">Next on your schedule</span><div class="metric-value compact" id="nextService">—</div><span class="small mute" id="nextDue"></span></div></div>
     <a class="glance-item" href="#attention"><span class="metric-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span><div><span class="metric-label">Attention needed</span><div class="metric-value" id="attentionCount">—</div></div><svg class="icon metric-arrow"><use href="#i-arrow"/></svg></a>
   </div>
-  <section class="card span-6" id="attention">
+  <section class="card span-7" id="attention">
     <div class="section-heading"><h2>Needs attention</h2><span class="section-tag">HEALTH CHECK</span></div>
     <div id="alerts"></div>
   </section>
-  <section class="card span-6" id="maintenanceCard">
+  <section class="card span-5" id="comingCard">
+    <div class="section-heading"><h2>Coming up</h2><a class="text-link" href="#maintenance">All maintenance<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+    <div id="comingList"></div>
+  </section>
+</div>
+<div class="view" id="maintenance" data-title="Maintenance" hidden>
+  <div class="page-intro wide"><div><div class="eyebrow">STAY AHEAD OF SERVICE</div><h1 tabindex="-1">Maintenance</h1><p class="mute">Predicted from your mileage, sensor wear and service history.</p></div></div>
+  <section class="card span-8" id="maintenanceCard">
     <div class="section-heading"><h2>Upcoming maintenance</h2><svg class="icon" aria-hidden="true"><use href="#i-service"/></svg></div>
     <div id="maint"></div>
-    <div class="calendar-export">
-      <div class="t"><div>Calendar reminders</div><div class="mute small">Google Calendar, Apple Calendar &amp; Outlook</div></div>
-      <button type="button" class="ghost small" id="calendarBtn" disabled>Download .ics</button>
-      <details class="small"><summary>How to use</summary>
-        <p class="mute">Import the file into a separate calendar to keep your predicted service dates handy, with a 1-day reminder.
-          Overdue items appear today. Your calendar app controls notifications.</p>
-        <p class="mute">This is a snapshot, not a live sync. After logging a service or updating readings, replace the old imported calendar
-          with a fresh download. Always follow your owner's manual and act on warnings immediately.</p>
-      </details>
-      <div id="calendarStatus" class="mute small" role="status" hidden></div>
-    </div>
     <details class="logsvc" id="logSvc"><summary>Log a service</summary>
       <form id="svcForm">
         <select name="item" id="svcItem" aria-label="Service item"></select>
@@ -182,20 +179,47 @@
       </form>
     </details>
   </section>
+  <section class="card span-4" id="calendarCard">
+    <div class="section-heading"><div><h2>Calendar reminders</h2><p class="section-description">Google Calendar, Apple Calendar &amp; Outlook</p></div><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></div>
+    <div class="calendar-export">
+      <div class="t"><div>Predicted service dates</div><div class="mute small">With a reminder the day before</div></div>
+      <button type="button" class="ghost small" id="calendarBtn" disabled>Download .ics</button>
+      <details class="small"><summary>How to use</summary>
+        <p class="mute">Import the file into a separate calendar to keep your predicted service dates handy, with a 1-day reminder.
+          Overdue items appear today. Your calendar app controls notifications.</p>
+        <p class="mute">This is a snapshot, not a live sync. After logging a service or updating readings, replace the old imported calendar
+          with a fresh download. Always follow your owner's manual and act on warnings immediately.</p>
+      </details>
+      <div id="calendarStatus" class="mute small" role="status" hidden></div>
+    </div>
+  </section>
+</div>
+<div class="view" id="health" data-title="Health" hidden>
+  <div class="page-intro wide"><div><div class="eyebrow">LIVE FROM YOUR SENSORS</div><h1 tabindex="-1">Health</h1><p class="mute">Every system, open recalls, and answers about your car.</p></div></div>
   <section class="card wide" id="systemsCard">
     <div class="section-heading"><div><h2>Under the hood</h2><p class="section-description">The essentials first. Open a system for all its readings.</p></div><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg></div>
     <div class="systems" id="vitals"></div>
-  </section>
-  <section class="card span-6" id="historyCard">
-    <div class="section-heading"><h2>Your service history</h2><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></div>
-    <div class="tabs"><button class="on" data-tab="services">Services</button><button data-tab="log">Alert log</button></div>
-    <div id="services"></div>
-    <div id="log" hidden></div>
   </section>
   <section class="card span-6" id="recallCard">
     <div class="section-heading"><h2>Safety recalls</h2><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
     <div id="recalls"><span class="mute">Checking the recall database…</span></div>
   </section>
+  <section class="card span-6" id="askCard" hidden>
+    <h2>Ask VitaDrive</h2>
+    <form id="askForm" style="display:flex;gap:8px;margin:0">
+      <input name="q" maxlength="500" required placeholder="Ask anything about this car" aria-label="Ask anything about this car" style="flex:1;width:auto">
+      <button>Ask</button>
+    </form>
+    <div class="chips" id="askChips">
+      <button type="button" class="chip">What needs attention?</button>
+      <button type="button" class="chip">When is my next service?</button>
+      <button type="button" class="chip">Is it safe for a long trip?</button>
+    </div>
+    <div id="answer"></div>
+  </section>
+</div>
+<div class="view" id="costs" data-title="Costs" hidden>
+  <div class="page-intro wide"><div><div class="eyebrow">WHAT KEEPS YOU MOVING</div><h1 tabindex="-1">Costs</h1><p class="mute">Fill-ups, charging and what each kilometre really costs.</p></div></div>
   <section class="card wide" id="costCard">
     <div class="section-heading"><div><h2 id="costTitle">Fuel costs</h2><p class="section-description">Keep an eye on what keeps you moving.</p></div><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg></div>
     <div class="cost-grid"><div class="kpis" id="costKpis"></div><div class="bars" id="costBars"></div></div>
@@ -211,19 +235,18 @@
     </details>
     <details class="logsvc"><summary id="fuelListTitle">Fill-up history</summary><div id="fuelList"></div></details>
   </section>
-  <section class="card span-5" id="askCard" hidden>
-    <h2>Ask VitaDrive</h2>
-    <form id="askForm" style="display:flex;gap:8px;margin:0">
-      <input name="q" maxlength="500" required placeholder="Ask anything about this car" aria-label="Ask anything about this car" style="flex:1;width:auto">
-      <button>Ask</button>
-    </form>
-    <div class="chips" id="askChips">
-      <button type="button" class="chip">What needs attention?</button>
-      <button type="button" class="chip">When is my next service?</button>
-      <button type="button" class="chip">Is it safe for a long trip?</button>
-    </div>
-    <div id="answer"></div>
+</div>
+<div class="view" id="history" data-title="History" hidden>
+  <div class="page-intro wide"><div><div class="eyebrow">ON THE RECORD</div><h1 tabindex="-1">History</h1><p class="mute">Services you have logged and every alert VitaDrive has raised.</p></div></div>
+  <section class="card wide" id="historyCard">
+    <div class="section-heading"><h2>Your service history</h2><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></div>
+    <div class="tabs"><button class="on" data-tab="services">Services</button><button data-tab="log">Alert log</button></div>
+    <div id="services"></div>
+    <div id="log" hidden></div>
   </section>
+</div>
+<div class="view" id="help" data-title="Nearby help" hidden>
+  <div class="page-intro wide"><div><div class="eyebrow">WHEN YOU NEED A HAND</div><h1 tabindex="-1">Nearby help</h1><p class="mute">Mechanics, tire shops, parts stores and chargers near you.</p></div></div>
   <section class="card wide" id="nearCard">
     <div class="section-heading"><div><h2>Good help, close by.</h2><p class="section-description">Find the right stop for your next step.</p></div><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg></div>
     <div class="near-top">
@@ -237,10 +260,24 @@
     <div class="mute small" id="nearWhy"></div>
     <div class="near-body" id="nearBody" hidden><div id="nearMap"></div><div id="nearList"></div></div>
   </section>
+</div>
 </main>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function setHTML(el, html) {
+  if (el._html === html) return false;
+  el._html = html; el.innerHTML = html; return true;
+}
+function countUp(el, to) {
+  const from = +el.dataset.n || 0, fmt = n => Math.round(n).toLocaleString();
+  el.dataset.n = to;
+  if (reduceMotion.matches || from === to) { el.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  const step = t => { const p = Math.min(1, (t - t0) / 900); el.textContent = fmt(from + (to - from) * (1 - (1 - p) ** 3)); if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
 const badge = s => `<span class="badge ${s}">${s}</span>`;
 let authEnabled = false;
 async function api(path, opts = {}) {
@@ -331,7 +368,8 @@ async function boot() {
   const cfg = await fetch("/api/config").then(r => r.json());
   authEnabled = cfg.auth_enabled;
   $("#askCard").hidden = !cfg.assistant_enabled;
-  $("#askCard").classList.toggle("wide", cfg.assistant_enabled);
+  $("#recallCard").classList.toggle("wide", !cfg.assistant_enabled);
+  $("#recallCard").classList.toggle("span-6", cfg.assistant_enabled);
   if (authEnabled) {
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
@@ -375,12 +413,14 @@ async function refresh() {
   const upcoming = [...rep.maintenance].sort((a, b) => a.days_remaining - b.days_remaining), next = upcoming[0];
   $("#statusRing").style.setProperty("--c", `var(--${rep.status})`);
   $("#statusRing").textContent = GLYPH[rep.status];
+  $("#statusRing").classList.toggle("pulse", rep.status === "warning" || rep.status === "critical");
   $("#carName").textContent = `${v.year} ${v.make} ${v.model}`;
   $("#status").textContent = HEADLINE[rep.status];
   $("#status").style.color = `var(--${rep.status})`;
   $("#summary").textContent = [groups.length ? `${groups.length} ${groups.length === 1 ? "item needs" : "items need"} attention` : "No warnings",
     next && `next service: ${next.label.toLowerCase()} ${dueText(next)}`].filter(Boolean).join(" · ");
-  $("#odo").innerHTML = lr ? `${Math.round(lr.odometer_km).toLocaleString()} <small>km</small>` : "No readings yet";
+  if (!lr) setHTML($("#odo"), "No readings yet");
+  else { setHTML($("#odo"), `<span id="odoNum"></span> <small>km</small>`); countUp($("#odoNum"), Math.round(lr.odometer_km)); }
   $("#powertrain").textContent = {ice: "Petrol / diesel", hybrid: "Hybrid", ev: "Electric"}[v.powertrain] || v.powertrain;
   $("#updatedStamp").textContent = lr ? `Last reading · ${new Date(lr.timestamp).toLocaleString()}` : "Waiting for your first reading";
   $("#nextService").textContent = next ? next.label : "No forecast yet";
@@ -394,11 +434,12 @@ async function refresh() {
     $("#aiCheck").title = `Learned fault detector score ${an.score} (normal below ${an.threshold})`;
   }
   const r = rep.range, C = 2 * Math.PI * 52;
-  $("#range").innerHTML = r ? `<div class="gauge-wrap" title="${esc(r.consumption_basis)}">
+  const rangeChanged = setHTML($("#range"), r ? `<div class="gauge-wrap" title="${esc(r.consumption_basis)}">
       <svg class="gauge" aria-hidden="true" viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/>
-      <circle cx="60" cy="60" r="52" style="stroke:var(--${r.status});stroke-dasharray:${C * r.level_pct / 100} ${C}"/></svg>
-      <div class="gauge-label"><b>${Math.round(r.range_km)}</b><span>km range</span></div></div>
-    <div class="range-note"><span class="dot" style="--c:var(--${r.status})"></span>${Math.round(r.level_pct)}% ${esc(r.energy_source)} remaining</div>` : `<p class="mute">Add a reading to see your estimated range.</p>`;
+      <circle class="fill" cx="60" cy="60" r="52" style="stroke:var(--${r.status});stroke-dasharray:${C * r.level_pct / 100} ${C}"/></svg>
+      <div class="gauge-label"><b data-count="${Math.round(r.range_km)}">0</b><span>km range</span></div></div>
+    <div class="range-note"><span class="dot" style="--c:var(--${r.status})"></span>${Math.round(r.level_pct)}% ${esc(r.energy_source)} remaining</div>` : `<p class="mute">Add a reading to see your estimated range.</p>`);
+  if (rangeChanged && r) countUp($("#range b"), +$("#range b").dataset.count);
 
   $("#alerts").innerHTML = groups.length ? "" : `<div class="allgood"><span class="dot"></span>Nothing needs your attention right now.</div>`;
   if (groups.length) collapsible("alerts", groups.map(g => `<details class="issue"><summary><span class="dot" style="--c:var(--${g.sev})"></span>
@@ -410,7 +451,7 @@ async function refresh() {
   const openSystems = new Set([...document.querySelectorAll("#vitals details[open]")].map(el => el.dataset.system));
   const row = k => { const s = alertMetrics.get(k) || "ok", u = VITALS.find(([m]) => m === k)[2];
     return `<div class="row"><span class="mute">${label(k)}</span><span class="v" ${s !== "ok" ? `style="color:var(--${s})"` : ""}>${lr[k]} <small>${u}</small></span></div>`; };
-  $("#vitals").innerHTML = lr ? SYSTEMS.map(([name, keys]) => {
+  setHTML($("#vitals"), lr ? SYSTEMS.map(([name, keys]) => {
     const present = keys.filter(k => lr[k] != null);
     if (!present.length) return "";
     const s = worst(present.map(k => alertMetrics.get(k) || "ok").concat(name === "Engine & fluids" && lr.dtc_codes.length ? ["warning"] : []));
@@ -420,12 +461,15 @@ async function refresh() {
     const body = name === "Tires" ? `<div class="tires">${tires.map(tire).join("")}</div>${present.filter(k => !tires.includes(k)).map(row).join("")}`
       : present.map(row).join("");
     return `<details class="sys" data-system="${name}" ${openSystems.has(name) ? "open" : ""} style="--c:var(--${s})"><summary class="sys-head"><span class="dot"></span><span>${name}</span><span class="state">${STATE[s]}</span></summary><div class="sys-body">${body}</div></details>`;
-  }).join("") : `<span class="mute">No readings yet. Send one with the car's API key.</span>`;
+  }).join("") : `<span class="mute">No readings yet. Send one with the car's API key.</span>`);
 
   collapsible("maint", upcoming.map(m => `<div class="svc"><span class="dot" style="--c:var(--${m.status})"></span><div class="t">
     <div>${esc(m.label)}</div><div class="mute small" title="${esc(m.reason)}">${fmtDate(m.due_date)} · ${dueText(m)}${m.km_remaining == null ? ""
     : ` · ${Math.max(0, Math.round(m.km_remaining)).toLocaleString()} km left`}</div></div>
-    <button class="ghost small hide-sm" onclick="prefill('${m.item}')">Log</button></div>`), 3, "items");
+    <button class="ghost small hide-sm" onclick="prefill('${m.item}')">Log</button></div>`), 6, "items");
+  setHTML($("#comingList"), upcoming.length ? upcoming.slice(0, 3).map(m => `<a class="svc" href="#maintenanceCard"><span class="dot" style="--c:var(--${m.status})"></span>
+    <div class="t"><div>${esc(m.label)}</div><div class="mute small">${fmtDate(m.due_date)} · ${dueText(m)}</div></div><svg class="icon metric-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></a>`).join("")
+    : `<span class="mute">Add a reading to see predicted service dates.</span>`);
   $("#svcItem").innerHTML = rep.maintenance.map(m => `<option value="${m.item}">${esc(m.label)}</option>`).join("");
   collapsible("services", services.map(s => `<div class="svc"><div class="t"><div>${esc(rep.maintenance.find(m => m.item === s.item)?.label || s.item)}</div>
     <div class="mute small">${fmtDate(s.performed_on)} · ${Math.round(s.odometer_km).toLocaleString()} km${s.shop ? ` · ${esc(s.shop)}` : ""}${s.notes ? ` · ${esc(s.notes)}` : ""}</div></div>
@@ -454,14 +498,14 @@ async function loadCosts(forVin) {
   $("#fuelListTitle").textContent = `${ev ? "Charging" : "Fill-up"} history`;
   $("#fuelForm").amount.placeholder = ev ? "kWh" : "Litres";
   const kpi = (v, l, big) => `<div class="kpi${big ? " big" : ""}"><b>${v}</b><span>${l}</span></div>`;
-  $("#costKpis").innerHTML = !s.fills ? `<span class="mute">No ${what}s logged yet. Log one below; after two you'll see your cost per km.</span>`
+  setHTML($("#costKpis"), !s.fills ? `<span class="mute">No ${what}s logged yet. Log one below; after two you'll see your cost per km.</span>`
     : kpi(s.cost_per_km == null ? "–" : money(s.cost_per_km, s.cost_per_km < 0.1 ? 3 : 2), "per km driven", true)
       + kpi(money(s.this_month_cost), "spent this month")
       + kpi(s.avg_price_per_unit == null ? "–" : money(s.avg_price_per_unit), `average per ${s.unit}`)
-      + kpi(s.consumption_per_100km == null ? "–" : s.consumption_per_100km.toFixed(1), `${s.unit}/100 km, real`);
+      + kpi(s.consumption_per_100km == null ? "–" : s.consumption_per_100km.toFixed(1), `${s.unit}/100 km, real`));
   const max = Math.max(...s.months.map(m => m.cost), 1);
-  $("#costBars").innerHTML = !s.fills ? "" : s.months.map((m, i) => `<div class="bar${i === s.months.length - 1 ? " now" : ""}" title="${money(m.cost)}">
-    <span>${m.cost ? Math.round(m.cost).toLocaleString() : ""}</span><i style="height:calc((100% - 40px) * ${m.cost / max})"></i>${monthName(m.month)}</div>`).join("");
+  setHTML($("#costBars"), !s.fills ? "" : s.months.map((m, i) => `<div class="bar${i === s.months.length - 1 ? " now" : ""}" title="${money(m.cost)}">
+    <span>${m.cost ? Math.round(m.cost).toLocaleString() : ""}</span><i style="height:calc((100% - 40px) * ${m.cost / max});animation-delay:${i * 60}ms"></i>${monthName(m.month)}</div>`).join(""));
   if (logs.length) collapsible("fuelList", logs.map(l => `<div class="svc"><div class="t"><div>${l.amount} ${s.unit}${l.station ? ` · ${esc(l.station)}` : ""}</div>
     <div class="mute small">${fmtDate(l.filled_on)} · ${Math.round(l.odometer_km).toLocaleString()} km</div></div>
     <span class="mute">${money(l.cost)}</span><button class="ghost small" onclick="delFuel(${l.id})">Delete</button></div>`), 5, "entries");
@@ -642,7 +686,7 @@ $("#vehForm").onsubmit = async e => {
 };
 
 const NEAR_KINDS = {mechanic: "Mechanic", tyres: "Tire shop", parts: "Parts store", dealer: "Car dealer", charging: "EV charger"};
-let nearVin = null, nearKind = null, nearMap = null, nearLayer = null, leafletP = null;
+let nearBounds = null, nearVin = null, nearKind = null, nearMap = null, nearLayer = null, leafletP = null;
 let nearLoc = JSON.parse(localStorage.getItem("vd-near-loc") || "null");
 const saveLoc = l => { nearLoc = l; localStorage.setItem("vd-near-loc", JSON.stringify(l)); };
 function loadLeaflet() {
@@ -712,7 +756,8 @@ function renderNearby(res) {
     const markers = res.places.slice(0, 6).map((p, i) => L.marker([p.lat, p.lon], {icon: L.divIcon({className: "", html: `<div class="pin">${i + 1}</div>`,
       iconSize: [24, 24], iconAnchor: [12, 12]})}).bindPopup(`<b>${esc(p.name)}</b><br><a href="${dir(p)}" target="_blank" rel="noopener">Directions</a>`).addTo(nearLayer));
     nearMap.invalidateSize();
-    nearMap.fitBounds(L.featureGroup(markers).getBounds().extend([res.lat, res.lon]), {padding: [30, 30], maxZoom: 15});
+    nearBounds = L.featureGroup(markers).getBounds().extend([res.lat, res.lon]);
+    nearMap.fitBounds(nearBounds, {padding: [30, 30], maxZoom: 15});
     document.querySelectorAll("#nearList .place").forEach(el => el.onclick = e => {
       if (e.target.closest("a")) return;
       const m = markers[+el.dataset.i]; nearMap.flyTo(m.getLatLng(), 15, {duration: .6}); m.openPopup();
@@ -747,21 +792,45 @@ $("#nearForm").onsubmit = async e => {
     saveLoc({lat: res.lat, lon: res.lon, label: q}); form.reset(); renderNearby(res);
   } catch (err) { if (seq === nearSeq) nearFail(err, () => form.requestSubmit()); }
 };
-let navFrame = false;
+const views = [...document.querySelectorAll(".view")];
 const navLinks = [...document.querySelectorAll(".nav-links a")];
-function updateNavigation() {
-  navFrame = false;
-  const positions = navLinks.map(a => ({a, top: $(a.getAttribute("href")).getBoundingClientRect().top}));
-  const current = positions.filter(p => p.top <= 180).sort((a, b) => b.top - a.top)[0]?.a || navLinks[0];
-  for (const a of navLinks) {
-    a.classList.toggle("active", a === current);
-    if (a === current) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current");
+const motion = () => reduceMotion.matches ? "instant" : "smooth";
+let currentView = null;
+function route({focus = false, force = false} = {}) {
+  const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  const view = target ? target.closest(".view") : views[0];
+  if (!view) return;
+  const changed = view !== currentView;
+  if (changed) {
+    currentView = view;
+    for (const v of views) v.hidden = v !== view;
+    view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
+    for (const a of navLinks) {
+      const on = a.getAttribute("href") === `#${view.id}`, rail = a.parentElement;
+      a.classList.toggle("active", on);
+      if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+      if (on && rail.scrollWidth > rail.clientWidth) rail.scrollTo({left: a.offsetLeft - rail.offsetLeft - 14, behavior: motion()});
+    }
+    $("#currentSection").textContent = view.dataset.title;
+    document.title = view === views[0] ? "VitaDrive" : `${view.dataset.title} · VitaDrive`;
+    if (view.id === "help" && nearMap) requestAnimationFrame(() => {
+      nearMap.invalidateSize();
+      if (nearBounds) nearMap.fitBounds(nearBounds, {padding: [30, 30], maxZoom: 15});
+    });
   }
-  $("#currentSection").textContent = current.textContent.trim();
+  if (target && target !== view) requestAnimationFrame(() => target.scrollIntoView({behavior: motion(), block: "start"}));
+  else if (changed || force) window.scrollTo({top: 0, behavior: changed ? "instant" : motion()});
+  if (focus && changed) view.querySelector("h1")?.focus({preventScroll: true});
 }
-window.addEventListener("scroll", () => {
-  if (!navFrame && !$("#main").hidden) { navFrame = true; requestAnimationFrame(updateNavigation); }
-}, {passive: true});
+views.forEach(v => [...v.children].forEach((c, i) => c.style.setProperty("--i", i)));
+window.addEventListener("hashchange", () => route({focus: true}));
+document.addEventListener("click", e => {
+  const a = e.target.closest('a[href^="#"]');
+  if (a && a.getAttribute("href") === location.hash) { e.preventDefault(); route({force: true}); }
+  const s = e.target.closest("summary"), d = s?.parentElement;
+  if (d && !d.open) { d.classList.remove("revealing"); void d.offsetWidth; d.classList.add("revealing"); }
+});
+route();
 boot();
 </script>
 </body>
