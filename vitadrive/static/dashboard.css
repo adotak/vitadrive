@@ -53,7 +53,7 @@ summary { cursor: pointer; }
 .icon { display: inline-block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: middle; }
 .skip-link { position: fixed; left: 20px; top: -80px; background: white; padding: 12px 20px; z-index: 20; border-radius: 8px; }
 .skip-link:focus { top: 12px; }
-.sidebar { width: 226px; position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; padding: 36px 20px 24px; background: var(--forest); color: #c1d0c5; z-index: 10; }
+.sidebar { width: 226px; position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; padding: 36px 20px 24px; background: var(--forest); color: #c1d0c5; z-index: 10; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 9px; padding: 0 8px; color: white; font: 600 25px var(--display); letter-spacing: -1px; text-decoration: none; }
 .brand-mark { background: var(--accent); color: var(--forest); display: grid; place-items: center; width: 32px; height: 34px; border-radius: 10px 10px 5px 5px; }
 .brand-mark .icon { width: 23px; height: 23px; stroke-width: 1.8; }
@@ -304,11 +304,15 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
   .nav-links a { flex: none; color: var(--mute); font-size: 11px; padding: 8px 10px; gap: 6px; border-radius: 7px; }
   .nav-links a .icon { width: 15px; height: 15px; }
   .nav-links a:hover { background: #e7eddf; color: var(--fg); }
-  body.dashboard header { margin: 0; padding: 12px 18px; min-height: 96px; position: fixed; inset: 0 0 auto; gap: 8px; flex-wrap: wrap; }
+  body.dashboard header { margin: 0; padding: 12px 18px; height: 96px; position: fixed; inset: 0 0 auto; gap: 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: 32px 30px; grid-template-areas: 'brand alerts user' 'vehicle key demo'; }
   body.dashboard { padding-top: 96px; }
-  .mobile-brand { display: block; margin-right: auto; color: var(--forest); font: 600 22px var(--display); letter-spacing: -1px; text-decoration: none; }
+  .mobile-brand { grid-area: brand; display: block; margin-right: auto; color: var(--forest); font: 600 21px var(--display); letter-spacing: -1px; text-decoration: none; }
   .mobile-brand span { color: #63864d; }
-  header select { order: 5; flex: 1 1 100%; max-width: none; padding: 6px 9px; height: 30px; }
+  header select { grid-area: vehicle; width: 100%; max-width: none; padding: 6px 9px; height: 30px; }
+  header .alerts-menu { grid-area: alerts; }
+  #apiKeyBtn { grid-area: key; }
+  #demoBtn { grid-area: demo; }
+  #userButton { grid-area: user; justify-self: end; }
   header > span { display: none; }
   header button { font-size: 10px; padding: 6px 8px; }
   main { margin: 0; padding: 23px 16px 40px; gap: 15px; }
@@ -340,7 +344,7 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
   .metric-label { font-size: 10px; }
   .metric-arrow { width: 15px; }
   .section-heading { margin-bottom: 14px; }
-  .section-tag { font-size: 7px; }
+  .section-tag { font-size: 9px; }
   .systems { grid-template-columns: 1fr; gap: 9px; }
   .sys { padding: 13px; }
   .sys-head { font-size: 12px; }
@@ -367,7 +371,7 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
   .calendar-export button { padding: 6px 8px; }
   .glance-item { padding: 0 13px; }
   .metric-value { font-size: 23px; }
-  .badge { font-size: 7px; }
+  .badge { font-size: 9px; }
   .issue summary { gap: 8px; }
   .gallery { grid-template-columns: 1fr; }
 }

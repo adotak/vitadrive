@@ -55,7 +55,7 @@
     <div class="pop" id="alertsPop" hidden><button class="link" id="pushTest">Send a test alert</button>
       <button class="link" id="pushOff">Turn off alerts</button></div></div>
   <button class="ghost" id="apiKeyBtn" hidden>API key</button>
-  <button class="ghost" id="demoBtn"><span aria-hidden="true">＋</span> Add demo cars</button>
+  <button class="ghost" id="demoBtn">Add demo cars</button>
   <div id="userButton"></div>
 </header>
 <div id="landing" hidden>
@@ -622,9 +622,10 @@ $("#svcForm").onsubmit = async e => {
   e.target.reset(); refresh();
 };
 $("#demoBtn").onclick = async e => {
-  e.target.disabled = true; e.target.textContent = "Simulating 90 days…";
+  const button = e.currentTarget;
+  button.disabled = true; button.textContent = "Simulating 90 days…";
   try { const vs = await api("/api/demo", {method: "POST"}); await loadVehicles(vs[0]?.vin); }
-  finally { e.target.disabled = false; e.target.textContent = "Add demo cars"; }
+  finally { button.disabled = false; button.textContent = "Add demo cars"; }
 };
 $("#apiKeyBtn").onclick = async () => {
   if (!confirm("Generate a new API key for this vehicle? Any previous key stops working.")) return;
