@@ -121,6 +121,7 @@
     <button>Add vehicle</button>
   </form>
 </section>
+<div class="scroll-progress" aria-hidden="true"></div>
 <main id="main" hidden tabindex="-1">
 <div class="view" id="overview" data-title="Overview">
   <div class="page-intro wide">
@@ -316,8 +317,8 @@ const dueText = m => m.days_remaining < 0 ? `overdue by ${-m.days_remaining} day
 const expanded = new Set();
 function collapsible(id, rows, n, noun) {
   const el = $("#" + id), open = expanded.has(id);
-  el.innerHTML = rows.map((r, i) => i < n ? r : r.replace(/^<(\w+) class="/, '<$1 class="extra ').replace(/^<(\w+)>/, '<$1 class="extra">')).join("")
-    + (rows.length > n ? `<button class="link" onclick="toggleMore('${id}')">${open ? "Show less" : `Show all ${rows.length} ${noun}`}</button>` : "");
+  setHTML(el, rows.map((r, i) => i < n ? r : r.replace(/^<(\w+) class="/, '<$1 class="extra ').replace(/^<(\w+)>/, '<$1 class="extra">')).join("")
+    + (rows.length > n ? `<button class="link" onclick="toggleMore('${id}')">${open ? "Show less" : `Show all ${rows.length} ${noun}`}</button>` : ""));
   open ? el.removeAttribute("data-collapsed") : el.setAttribute("data-collapsed", "");
 }
 window.toggleMore = id => { expanded.has(id) ? expanded.delete(id) : expanded.add(id);
@@ -441,7 +442,7 @@ async function refresh() {
     <div class="range-note"><span class="dot" style="--c:var(--${r.status})"></span>${Math.round(r.level_pct)}% ${esc(r.energy_source)} remaining</div>` : `<p class="mute">Add a reading to see your estimated range.</p>`);
   if (rangeChanged && r) countUp($("#range b"), +$("#range b").dataset.count);
 
-  $("#alerts").innerHTML = groups.length ? "" : `<div class="allgood"><span class="dot"></span>Nothing needs your attention right now.</div>`;
+  if (!groups.length) setHTML($("#alerts"), `<div class="allgood"><span class="dot"></span>Nothing needs your attention right now.</div>`);
   if (groups.length) collapsible("alerts", groups.map(g => `<details class="issue"><summary><span class="dot" style="--c:var(--${g.sev})"></span>
     <span class="t">${esc(g.title)}</span><span class="badge ${g.sev}">${g.sev}</span></summary>
     <div class="body"><span>${esc(g.detail)}</span><button class="ghost small" onclick="dismiss([${g.ids.join(",")}])">Dismiss</button></div></details>`),
@@ -474,11 +475,11 @@ async function refresh() {
   collapsible("services", services.map(s => `<div class="svc"><div class="t"><div>${esc(rep.maintenance.find(m => m.item === s.item)?.label || s.item)}</div>
     <div class="mute small">${fmtDate(s.performed_on)} · ${Math.round(s.odometer_km).toLocaleString()} km${s.shop ? ` · ${esc(s.shop)}` : ""}${s.notes ? ` · ${esc(s.notes)}` : ""}</div></div>
     <span class="mute">${s.cost ?? ""}</span></div>`), 6, "services");
-  if (!services.length) $("#services").innerHTML = `<span class="mute">No services recorded yet.</span>`;
+  if (!services.length) setHTML($("#services"), `<span class="mute">No services recorded yet.</span>`);
   collapsible("log", log.map(a => `<div class="svc"><span class="dot" style="--c:var(--${a.acknowledged ? "line" : a.severity})"></span><div class="t">
     <div>${esc(a.label)}${a.metric === "dtc" ? ` ${esc(a.value)}` : ""}</div><div class="mute small">${new Date(a.timestamp).toLocaleString()} · ${a.acknowledged ? "resolved" : "open"}</div></div></div>`),
     6, "alerts");
-  if (!log.length) $("#log").innerHTML = `<span class="mute">No alerts yet.</span>`;
+  if (!log.length) setHTML($("#log"), `<span class="mute">No alerts yet.</span>`);
   if (nearVin !== vin) { nearVin = vin; nearKind = null; loadNearby(); }
   if (webVin !== vin) { webVin = vin; loadPhoto(vin); loadRecalls(vin); }
   loadCosts(vin);
@@ -509,7 +510,7 @@ async function loadCosts(forVin) {
   if (logs.length) collapsible("fuelList", logs.map(l => `<div class="svc"><div class="t"><div>${l.amount} ${s.unit}${l.station ? ` · ${esc(l.station)}` : ""}</div>
     <div class="mute small">${fmtDate(l.filled_on)} · ${Math.round(l.odometer_km).toLocaleString()} km</div></div>
     <span class="mute">${money(l.cost)}</span><button class="ghost small" onclick="delFuel(${l.id})">Delete</button></div>`), 5, "entries");
-  else $("#fuelList").innerHTML = `<span class="mute">Nothing logged yet.</span>`;
+  else setHTML($("#fuelList"), `<span class="mute">Nothing logged yet.</span>`);
 }
 window.delFuel = async id => { if (confirm("Delete this entry?")) { await api(`/api/vehicles/${vin}/fuel/${id}`, {method: "DELETE"}); loadCosts(vin); } };
 $("#fuelForm").onsubmit = async e => {
@@ -792,6 +793,42 @@ $("#nearForm").onsubmit = async e => {
     saveLoc({lat: res.lat, lon: res.lon, label: q}); form.reset(); renderNearby(res);
   } catch (err) { if (seq === nearSeq) nearFail(err, () => form.requestSubmit()); }
 };
+const REVEAL = ".view > *, .glance-item, .svc, .issue, .sys, .kpi, .place";
+const revealer = new IntersectionObserver(entries => {
+  let k = 0;
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    const el = e.target, delay = Math.min(k++, 6) * 70;
+    revealer.unobserve(el);
+    el.style.setProperty("--d", delay + "ms");
+    el.classList.add("sr-in");
+    clearTimeout(el._sr);
+    el._sr = setTimeout(() => el.classList.remove("sr", "sr-in"), 750 + delay);
+  }
+}, {rootMargin: "0px 0px -6% 0px"});
+function arm(el) {
+  if (reduceMotion.matches) return;
+  clearTimeout(el._sr);
+  el.classList.remove("sr-in"); el.classList.add("sr");
+  revealer.observe(el);
+}
+const armAll = root => root.querySelectorAll(REVEAL).forEach(arm);
+new MutationObserver(records => {
+  for (const r of records) for (const n of r.addedNodes) {
+    if (n.nodeType !== 1) continue;
+    if (n.matches(REVEAL)) arm(n);
+    armAll(n);
+  }
+}).observe($("#main"), {childList: true, subtree: true});
+let scrollFrame = false;
+function onScroll() {
+  scrollFrame = false;
+  const max = document.documentElement.scrollHeight - innerHeight;
+  $(".scroll-progress").style.setProperty("--p", max > 0 ? Math.min(1, scrollY / max) : 0);
+  document.body.classList.toggle("scrolled", scrollY > 8);
+}
+addEventListener("scroll", () => { if (!scrollFrame) { scrollFrame = true; requestAnimationFrame(onScroll); } }, {passive: true});
+addEventListener("resize", onScroll, {passive: true});
 const views = [...document.querySelectorAll(".view")];
 const navLinks = [...document.querySelectorAll(".nav-links a")];
 const motion = () => reduceMotion.matches ? "instant" : "smooth";
@@ -803,8 +840,8 @@ function route({focus = false, force = false} = {}) {
   const changed = view !== currentView;
   if (changed) {
     currentView = view;
+    armAll(view);
     for (const v of views) v.hidden = v !== view;
-    view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
     for (const a of navLinks) {
       const on = a.getAttribute("href") === `#${view.id}`, rail = a.parentElement;
       a.classList.toggle("active", on);
@@ -821,8 +858,8 @@ function route({focus = false, force = false} = {}) {
   if (target && target !== view) requestAnimationFrame(() => target.scrollIntoView({behavior: motion(), block: "start"}));
   else if (changed || force) window.scrollTo({top: 0, behavior: changed ? "instant" : motion()});
   if (focus && changed) view.querySelector("h1")?.focus({preventScroll: true});
+  requestAnimationFrame(onScroll);
 }
-views.forEach(v => [...v.children].forEach((c, i) => c.style.setProperty("--i", i)));
 window.addEventListener("hashchange", () => route({focus: true}));
 document.addEventListener("click", e => {
   const a = e.target.closest('a[href^="#"]');
