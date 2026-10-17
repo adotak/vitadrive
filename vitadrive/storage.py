@@ -92,6 +92,12 @@ push_subs_t = Table(
     Column("endpoint", String(2000), nullable=False, unique=True),
     Column("data", Text, nullable=False),
 )
+rate_limits_t = Table(
+    "rate_limits", metadata,
+    Column("key", String(255), primary_key=True),
+    Column("window_start", Integer, primary_key=True),
+    Column("count", Integer, nullable=False),
+)
 
 LOCAL_OWNER = "local"
 

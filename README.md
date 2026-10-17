@@ -32,7 +32,7 @@ infotainment unit, a fleet backend, or a phone companion app.
 | **Fuel & charging costs** | Log each fill-up or charge (amount, price, odometer, station) and the dashboard shows cost per km, spend this month, average price per litre/kWh, *real* consumption (fill-to-fill method) and a 6-month spending chart. Demo cars come with simulated fill-ups and charges. |
 | **Records** | Permanent log (Postgres in production, SQLite locally) of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
 | **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
-| **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. |
+| **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. Database-backed request limits help protect the API from abuse. |
 | **Installable app** | Web app manifest and icons, so the dashboard can be installed from the browser ("Add to Home Screen" / "Install app") and opens full-screen like a native app. |
 | **Deployment** | Vercel (serverless) + Supabase Postgres. SQLite still works for local use. See [docs/DEPLOY.md](docs/DEPLOY.md). |
 

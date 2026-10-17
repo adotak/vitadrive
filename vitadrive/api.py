@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -25,6 +25,7 @@ from .models import (
     ServiceRecord,
     Vehicle,
 )
+from .ratelimit import Limit, RateLimited, RateLimiter, default_limits
 from .service import HealthReport, UnknownVehicle, VitaDrive
 from .storage import Store
 
@@ -93,18 +94,43 @@ def _default_db() -> str:
     return "vitadrive.db"
 
 
-def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -> FastAPI:
+def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
+               limits: dict[str, Limit] | None = None) -> FastAPI:
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
     vd = VitaDrive(Store(db or _default_db()))
     auth = auth or ClerkAuth.from_env()
+    app_limits = default_limits()
+    if limits is not None:
+        app_limits.update(limits)
+    rate_limiter = (None if os.environ.get("VITADRIVE_RATE_LIMITS", "1").strip().lower() in {"0", "false"}
+                    else RateLimiter(vd.store))
     app.state.vitadrive = vd
+    app.state.rate_limiter = rate_limiter
+
+    @app.exception_handler(RateLimited)
+    async def rate_limit_error(_request, exc: RateLimited):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": str(exc)},
+            headers={"Retry-After": str(exc.retry_after)},
+        )
 
     def current_user(authorization: str | None = Header(default=None)) -> str:
         try:
             return auth.user_id(authorization)
         except AuthError as exc:
             raise HTTPException(401, str(exc)) from None
+
+    def hit_limit(name: str, subject: str) -> None:
+        if rate_limiter is not None:
+            rate_limiter.hit(app_limits[name], subject)
+
+    def limited_user(name: str):
+        def dependency(user: str = Depends(current_user)) -> str:
+            hit_limit(name, user)
+            return user
+        return dependency
 
     def owned(vin: str, user: str = Depends(current_user)) -> str:
         """Resolve ``vin`` only if it belongs to the signed-in user (404 otherwise, to avoid leaking VINs)."""
@@ -173,12 +199,12 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
         vd.store.delete_vehicle(vin)
 
     @app.post("/api/vehicles/{vin}/api-key", response_model=ApiKeyOut)
-    def issue_api_key(vin: str = Depends(owned)):
+    def issue_api_key(vin: str = Depends(owned), user: str = Depends(limited_user("api_key"))):
         """Create (or replace) the key the car uses to send readings. It is only shown once."""
         return ApiKeyOut(vin=vin, api_key=vd.store.rotate_api_key(vin))
 
     @app.post("/api/demo", response_model=list[Vehicle], status_code=201)
-    def add_demo_vehicles(user: str = Depends(current_user)):
+    def add_demo_vehicles(user: str = Depends(limited_user("demo"))):
         """Add two simulated vehicles with 90 days of history to the signed-in account."""
         created = []
         for i, template in enumerate(DEMO_VEHICLES):
@@ -192,16 +218,17 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
     def ingest(reading: SensorReading, vin: str = Depends(ingest_vin)):
         if reading.vin != vin:
             raise HTTPException(400, "VIN in path and body must match")
+        hit_limit("readings", vin)
         alerts = guard(vd.ingest, reading)
         push.notify_critical(vd.store, vin, alerts)
         return alerts
 
     @app.get("/api/vehicles/{vin}/readings", response_model=list[SensorReading])
-    def readings(vin: str = Depends(owned), limit: int = 200):
+    def readings(vin: str = Depends(owned), limit: int = Query(200, ge=1, le=1000)):
         return vd.store.readings(vin, limit=limit)
 
     @app.get("/api/vehicles/{vin}/alerts", response_model=list[Alert])
-    def alerts(vin: str = Depends(owned), active_only: bool = False, limit: int = 200):
+    def alerts(vin: str = Depends(owned), active_only: bool = False, limit: int = Query(200, ge=1, le=1000)):
         return vd.store.alerts(vin, include_acknowledged=not active_only, limit=limit)
 
     @app.post("/api/alerts/{alert_id}/ack", status_code=204)
@@ -267,9 +294,11 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
         return guard(vd.report, vin)
 
     @app.post("/api/vehicles/{vin}/ask", response_model=AskOut)
-    def ask(body: AskIn, vin: str = Depends(owned)):
+    def ask(body: AskIn, vin: str = Depends(owned), user: str = Depends(current_user)):
         if llm is None and not assistant.enabled():
             raise HTTPException(503, "Ask VitaDrive is off: set OPENAI_API_KEY in the server environment")
+        hit_limit("ask", user)
+        hit_limit("ask_daily", user)
         rep = guard(vd.report, vin)
         try:
             return AskOut(answer=assistant.ask(rep, body.question, llm=llm))
@@ -279,7 +308,8 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
     @app.get("/api/vehicles/{vin}/nearby", response_model=nearby.NearbyOut)
     def nearby_places(vin: str = Depends(owned), kind: str | None = None,
                       lat: float | None = Query(None, ge=-90, le=90), lon: float | None = Query(None, ge=-180, le=180),
-                      q: str | None = Query(None, min_length=2, max_length=200)):
+                      q: str | None = Query(None, min_length=2, max_length=200),
+                      user: str = Depends(current_user)):
         """Shops that can fix what this car needs. Without a location, only the suggested needs are returned."""
         if kind is not None and kind not in nearby.KINDS:
             raise HTTPException(422, f"kind must be one of: {', '.join(nearby.KINDS)}")
@@ -288,6 +318,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None) -
         out = nearby.NearbyOut(kind=kind, label=nearby.KINDS[kind][0], needs=needs, places=[])
         if (lat is None or lon is None) and not q:
             return out
+        hit_limit("nearby", user)
         try:
             if lat is None or lon is None:
                 lat, lon = nearby.geocode(q)
