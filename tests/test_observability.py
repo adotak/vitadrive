@@ -117,7 +117,7 @@ def test_health_reports_database_revision_and_no_store(tmp_path):
         "ok": True,
         "version": app.version,
         "database": "ok",
-        "db_revision": "0003",
+        "db_revision": "0004",
     }
     assert response.headers["Cache-Control"] == "no-store"
 
