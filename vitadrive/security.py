@@ -5,7 +5,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 def build_csp(clerk_frontend_api: str | None) -> str:
     fapi = f"https://{clerk_frontend_api.strip().rstrip('/')}" if clerk_frontend_api else None
-    scripts = ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://challenges.cloudflare.com"]
+    scripts = ["'self'", "https://unpkg.com", "https://challenges.cloudflare.com"]
     connections = ["'self'"]
     frames = ["https://challenges.cloudflare.com"]
     if fapi:
@@ -18,7 +18,6 @@ def build_csp(clerk_frontend_api: str | None) -> str:
         ))
         frames.extend((fapi, "https://*.protect.clerk.com"))
 
-    # 'unsafe-inline' remains necessary until PR 7 moves the inline script into modules.
     directives = [
         "default-src 'self'",
         "base-uri 'self'",
