@@ -70,8 +70,8 @@ Open http://localhost:8000. When finished, stop the app and remove its local dat
 docker compose down -v
 ```
 
-The measured Linux/amd64 runtime image is **458 MB** as reported by `docker image ls`; the size can change as dependency
-versions update.
+The Linux/amd64 image is about **106 MB** to download (compressed) and **458 MB** on disk once unpacked; sizes change as
+dependency versions update.
 
 Live data from a car with an OBD-II dongle:
 
