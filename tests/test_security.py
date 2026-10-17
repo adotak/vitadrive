@@ -280,7 +280,10 @@ def test_every_owner_scoped_vin_route_rejects_bob_without_changing_alice_data(cl
     for (method, route_path), request_args in OWNER_ROUTE_CASES.items():
         path = route_path.replace("{vin}", VIN).replace("{log_id}", str(fuel_id))
         response = client.request(method, path, headers=BOB, **request_args)
-        assert response.status_code in {401, 403, 404}, (method, route_path, response.text)
+        if (method, route_path) == ("PUT", "/api/vehicles/{vin}"):
+            assert response.status_code == 409, response.text
+        else:
+            assert response.status_code in {401, 403, 404}, (method, route_path, response.text)
         assert _alice_data_snapshot(store) == before
 
     reading = {"vin": VIN, "odometer_km": 1001}

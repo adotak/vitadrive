@@ -85,7 +85,9 @@ def test_api_isolation_between_users_and_api_keys(tmp_path, clerk):
 
     assert client.get("/api/vehicles").status_code == 401
     assert client.put(f"/api/vehicles/{car['vin']}", json=car, headers=alice).status_code == 200
-    assert client.put(f"/api/vehicles/{car['vin']}", json=car, headers=bob).status_code == 404
+    conflict = client.put(f"/api/vehicles/{car['vin']}", json=car, headers=bob)
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "This VIN is registered to another account"
     assert client.get("/api/vehicles", headers=bob).json() == []
     assert client.get(f"/api/vehicles/{car['vin']}/report", headers=bob).status_code == 404
 

@@ -297,7 +297,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             raise HTTPException(400, "VIN in path and body must match")
         owner = vd.store.vehicle_owner(vin)
         if owner is not None and owner != user:
-            raise HTTPException(404, "Vehicle not registered")
+            raise HTTPException(409, "This VIN is registered to another account")
         return vd.store.upsert_vehicle(vehicle, owner_id=user)
 
     @app.delete("/api/vehicles/{vin}", status_code=204)
