@@ -15,6 +15,7 @@ from vitadrive.storage import (
     metadata,
     rate_limits_t,
     readings_daily_t,
+    trips_t,
     upgrade_db,
     vehicles_t,
 )
@@ -40,7 +41,7 @@ def _legacy_vehicle(engine):
 def test_fresh_sqlite_database_matches_models(tmp_path):
     store = Store(tmp_path / "fresh.db")
     try:
-        assert current_db_revision(store.engine) == "0003"
+        assert current_db_revision(store.engine) == "0004"
         _assert_matches_models(store.engine)
     finally:
         store.close()
@@ -52,12 +53,13 @@ def test_legacy_sqlite_database_is_stamped_without_data_loss(tmp_path):
     metadata.create_all(engine)
     readings_daily_t.drop(engine)
     rate_limits_t.drop(engine)
+    trips_t.drop(engine)
     _legacy_vehicle(engine)
     engine.dispose()
 
     store = Store(path)
     try:
-        assert current_db_revision(store.engine) == "0003"
+        assert current_db_revision(store.engine) == "0004"
         with store.engine.connect() as connection:
             assert connection.execute(
                 text("SELECT owner_id FROM vehicles WHERE vin = 'LEGACY00000000001'")
@@ -73,7 +75,7 @@ def test_opening_store_twice_is_idempotent(tmp_path):
     first.close()
     second = Store(path)
     try:
-        assert current_db_revision(second.engine) == "0003"
+        assert current_db_revision(second.engine) == "0004"
         _assert_matches_models(second.engine)
     finally:
         second.close()
@@ -105,7 +107,7 @@ def test_cli_db_current_upgrade_and_stamp(tmp_path, capsys):
     assert capsys.readouterr().out.strip() == "None"
     main(["--db", str(path), "db", "upgrade"])
     main(["--db", str(path), "db", "current"])
-    assert capsys.readouterr().out.strip() == "0003"
+    assert capsys.readouterr().out.strip() == "0004"
 
     stamped_path = tmp_path / "stamped.db"
     stamped_engine = create_engine(database_url(stamped_path))
@@ -123,7 +125,7 @@ def test_sqlite_upgrade_downgrade_and_upgrade_again(tmp_path):
             command.downgrade(_alembic_config(connection), "base")
         assert current_db_revision(store.engine) is None
         upgrade_db(store.engine)
-        assert current_db_revision(store.engine) == "0003"
+        assert current_db_revision(store.engine) == "0004"
         _assert_matches_models(store.engine)
     finally:
         store.close()
@@ -153,7 +155,7 @@ def postgres_engine():
 def test_fresh_postgres_database_matches_models(postgres_engine):
     store = Store(PG_URL)
     try:
-        assert current_db_revision(store.engine) == "0003"
+        assert current_db_revision(store.engine) == "0004"
         _assert_matches_models(store.engine)
     finally:
         store.close()
@@ -163,11 +165,12 @@ def test_legacy_postgres_database_is_stamped_without_data_loss(postgres_engine):
     metadata.create_all(postgres_engine)
     readings_daily_t.drop(postgres_engine)
     rate_limits_t.drop(postgres_engine)
+    trips_t.drop(postgres_engine)
     _legacy_vehicle(postgres_engine)
 
     store = Store(PG_URL)
     try:
-        assert current_db_revision(store.engine) == "0003"
+        assert current_db_revision(store.engine) == "0004"
         with store.engine.connect() as connection:
             assert connection.execute(
                 text("SELECT owner_id FROM vehicles WHERE vin = 'LEGACY00000000001'")
@@ -175,3 +178,29 @@ def test_legacy_postgres_database_is_stamped_without_data_loss(postgres_engine):
         _assert_matches_models(store.engine)
     finally:
         store.close()
+
+
+def _assert_trips_migration_roundtrip(engine):
+    with engine.begin() as connection:
+        command.downgrade(_alembic_config(connection), "0003")
+    assert current_db_revision(engine) == "0003"
+    assert "trips" not in inspect(engine).get_table_names()
+
+    upgrade_db(engine)
+
+    assert current_db_revision(engine) == "0004"
+    assert "trips" in inspect(engine).get_table_names()
+    _assert_matches_models(engine)
+
+
+def test_sqlite_trips_migration_downgrade_and_upgrade(tmp_path):
+    store = Store(tmp_path / "trips-cycle.db")
+    try:
+        _assert_trips_migration_roundtrip(store.engine)
+    finally:
+        store.close()
+
+
+def test_postgres_trips_migration_downgrade_and_upgrade(postgres_engine):
+    upgrade_db(postgres_engine)
+    _assert_trips_migration_roundtrip(postgres_engine)

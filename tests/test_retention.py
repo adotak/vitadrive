@@ -9,10 +9,10 @@ from sqlalchemy import func, insert, select
 from vitadrive import retention
 from vitadrive.api import create_app
 from vitadrive.demo import seed_vehicle
-from vitadrive.models import Powertrain, SensorReading, Vehicle
+from vitadrive.models import Powertrain, SensorReading, Trip, Vehicle
 from vitadrive.retention import PruneResult, merge_summary, prune, summarize_day
 from vitadrive.service import VitaDrive
-from vitadrive.storage import Store, rate_limits_t, readings_daily_t, readings_t
+from vitadrive.storage import Store, rate_limits_t, readings_daily_t, readings_t, trips_t
 
 PG_URL = os.environ.get("VITADRIVE_TEST_POSTGRES")
 NOW = datetime(2025, 4, 15, 12, tzinfo=timezone.utc)
@@ -99,6 +99,18 @@ def test_prune_compacts_old_history_and_preserves_forecast_and_range(tmp_path):
     vd = VitaDrive(store)
     seed_vehicle(vd, vehicle, days=90, per_day=2, seed=17, start_odometer_km=30_000)
     now = datetime.now(timezone.utc)
+    store.add_trip(Trip(
+        vin=vehicle.vin,
+        started_at=now - timedelta(days=60),
+        ended_at=now - timedelta(days=60) + timedelta(minutes=30),
+        start_odometer_km=29_000,
+        end_odometer_km=29_020,
+        start_level_pct=70,
+        end_level_pct=68,
+        max_speed_kmh=90,
+        samples=4,
+    ))
+    trips_before = store.trips(vehicle.vin)
     cutoff = datetime.combine((now - timedelta(days=30)).date(), datetime.min.time(), tzinfo=timezone.utc)
     today = now.date()
     forecasts_before = {item.item: item for item in vd.maintenance(vehicle.vin, today=today)}
@@ -110,6 +122,7 @@ def test_prune_compacts_old_history_and_preserves_forecast_and_range(tmp_path):
         assert result.vehicles == 1
         assert result.days_summarized > 0
         assert result.readings_removed > 0
+        assert store.trips(vehicle.vin) == trips_before
         with store.transaction() as connection:
             raw_old = connection.execute(
                 select(func.count()).select_from(readings_t).where(
@@ -236,6 +249,17 @@ def test_delete_vehicle_removes_daily_summaries(store):
     vehicle = _vehicle()
     store.upsert_vehicle(vehicle)
     store.add_reading(_reading(NOW - timedelta(days=40), 100))
+    store.add_trip(Trip(
+        vin=vehicle.vin,
+        started_at=NOW - timedelta(days=20),
+        ended_at=NOW - timedelta(days=20) + timedelta(minutes=20),
+        start_odometer_km=100,
+        end_odometer_km=110,
+        start_level_pct=70,
+        end_level_pct=68,
+        max_speed_kmh=70,
+        samples=3,
+    ))
     prune(store, older_than_days=30, now=NOW)
 
     store.delete_vehicle(vehicle.vin)
@@ -244,7 +268,10 @@ def test_delete_vehicle_removes_daily_summaries(store):
         count = connection.execute(
             select(func.count()).select_from(readings_daily_t).where(readings_daily_t.c.vin == vehicle.vin)
         ).scalar_one()
-    assert count == 0
+        trip_count = connection.execute(
+            select(func.count()).select_from(trips_t).where(trips_t.c.vin == vehicle.vin)
+        ).scalar_one()
+    assert count == trip_count == 0
 
 
 def test_readings_applies_since_and_limit_after_merging_summaries(store):

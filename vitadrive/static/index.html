@@ -38,6 +38,7 @@
     <a href="#health"><svg class="icon" aria-hidden="true"><use href="#i-pulse"/></svg>Health</a>
     <a href="#costs"><svg class="icon" aria-hidden="true"><use href="#i-wallet"/></svg>Costs</a>
     <a href="#history"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>History</a>
+    <a href="#trips"><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg>Trips</a>
     <a href="#help"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>Nearby help</a>
   </nav>
   <div class="sidebar-note">
@@ -248,6 +249,25 @@
     <div class="tabs"><button class="on" data-tab="services">Services</button><button data-tab="log">Alert log</button></div>
     <div id="services"></div>
     <div id="log" hidden></div>
+  </section>
+</div>
+<div class="view" id="trips" data-title="Trips" hidden>
+  <div class="page-intro wide"><div><div class="eyebrow">THE MILES YOU MAKE</div><h1 tabindex="-1">Trip history</h1><p class="mute">See where your driving takes you and how efficiently you get there.</p></div></div>
+  <section class="card wide" aria-labelledby="tripKpiTitle">
+    <div class="section-heading"><h2 id="tripKpiTitle">At a glance</h2><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg></div>
+    <div class="kpis" id="tripKpis"></div>
+  </section>
+  <section class="card wide" aria-labelledby="tripInsightsTitle">
+    <div class="section-heading"><h2 id="tripInsightsTitle">Driving insights</h2></div>
+    <div id="tripInsights"></div>
+  </section>
+  <section class="card wide" aria-labelledby="tripTrendTitle">
+    <div class="section-heading"><div><h2 id="tripTrendTitle">Efficiency trend</h2><p class="section-description">Real consumption by week over the last eight weeks.</p></div></div>
+    <div id="tripTrend"></div>
+  </section>
+  <section class="card wide" aria-labelledby="tripListTitle">
+    <div class="section-heading"><div><h2 id="tripListTitle">Recent trips</h2><p class="section-description">Your latest journeys, with distance, time and speed.</p></div></div>
+    <div id="tripList"></div>
   </section>
 </div>
 <div class="view" id="help" data-title="Nearby help" hidden>

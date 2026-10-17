@@ -6,6 +6,7 @@ import {initPush, initPushEvents} from "./push.js";
 import {initMotion} from "./motion.js";
 import {initRouter} from "./router.js";
 import {loadRecalls} from "./webinfo.js";
+import {loadTrips, toggleTrips} from "./trips.js";
 import {state} from "./state.js";
 import {$} from "./util.js";
 
@@ -38,6 +39,7 @@ async function boot() {
   $("#today").textContent = new Date().toLocaleDateString(undefined, {weekday: "short", day: "numeric", month: "short", year: "numeric"});
   initPush(cfg);
   await loadVehicles(new URLSearchParams(location.search).get("vin"));
+  if (state.vin) loadTrips(state.vin);
   setInterval(() => state.vin && refresh(), 15000);
 }
 
@@ -45,7 +47,8 @@ function initActions() {
   document.addEventListener("click", e => {
     const action = e.target.closest("[data-action]");
     if (!action) return;
-    if (action.dataset.action === "toggle-more") toggleMore(action.dataset.id);
+    if (action.dataset.action === "toggle-more" && action.dataset.id === "tripList") toggleTrips();
+    else if (action.dataset.action === "toggle-more") toggleMore(action.dataset.id);
     else if (action.dataset.action === "dismiss-alerts") dismiss(action.dataset.ids.split(",").map(Number));
     else if (action.dataset.action === "prefill-service") prefill(action.dataset.item);
     else if (action.dataset.action === "delete-fuel") deleteFuel(Number(action.dataset.id));
@@ -67,7 +70,7 @@ function initForms() {
   $("#askChips").onclick = e => { if (e.target.matches("button")) { $("#askForm").q.value = e.target.textContent; $("#askForm").requestSubmit(); } };
   $("#vehicle").onchange = e => {
     state.vin = e.target.value; state.calendarReadyVin = null; $("#calendarBtn").disabled = true; $("#calendarStatus").hidden = true;
-    $("#svcForm").reset(); $("#fuelForm").reset(); $("#answer").textContent = ""; refresh();
+    $("#svcForm").reset(); $("#fuelForm").reset(); $("#answer").textContent = ""; refresh(); loadTrips(state.vin);
   };
   $("#calendarBtn").onclick = async () => {
     const forVin = state.vin, button = $("#calendarBtn"), status = $("#calendarStatus");
@@ -106,7 +109,11 @@ function initForms() {
   $("#demoBtn").onclick = async e => {
     const button = e.currentTarget;
     button.disabled = true; button.textContent = "Simulating 90 days…";
-    try { const vs = await api("/api/demo", {method: "POST"}); await loadVehicles(vs[0]?.vin); }
+    try {
+      const vs = await api("/api/demo", {method: "POST"});
+      await loadVehicles(vs[0]?.vin);
+      if (state.vin) loadTrips(state.vin);
+    }
     finally { button.disabled = false; button.textContent = "Add demo cars"; }
   };
   $("#apiKeyBtn").onclick = async () => {
