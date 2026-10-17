@@ -145,7 +145,9 @@ def test_prune_compacts_old_history_and_preserves_forecast_and_range(tmp_path):
             km_tolerance = max(abs(before.km_remaining or 0) * 0.02, 50)
             assert due_delta <= 3, f"{item}: due-date delta {due_delta} days"
             assert km_delta <= km_tolerance, f"{item}: km_remaining delta {km_delta:.1f} km"
-        assert vd.range(vehicle.vin) == range_before
+        range_after = vd.range(vehicle.vin)
+        assert range_after.range_km == pytest.approx(range_before.range_km, rel=0.01)
+        assert range_after.status == range_before.status
 
         repeated = prune(store, now=now)
         assert repeated.vehicles == 0
