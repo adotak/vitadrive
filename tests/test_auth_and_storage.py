@@ -40,9 +40,11 @@ def clerk():
     auth = ClerkAuth(publishable_key=PK, authorized_parties=["https://vitadrive.test"])
     auth._jwks = FakeJWKS(private.public_key())
 
-    def token(sub, azp="https://vitadrive.test", exp_in=60):
-        return "Bearer " + jwt.encode({"sub": sub, "azp": azp, "exp": int(time.time()) + exp_in}, private,
-                                      algorithm="RS256")
+    def token(sub, azp="https://vitadrive.test", exp_in=60, issuer="https://clerk.example.com"):
+        claims = {"sub": sub, "azp": azp, "exp": int(time.time()) + exp_in}
+        if issuer is not None:
+            claims["iss"] = issuer
+        return "Bearer " + jwt.encode(claims, private, algorithm="RS256")
     return auth, token
 
 
@@ -59,7 +61,14 @@ def test_database_url_normalisation():
 def test_clerk_token_verification(clerk):
     auth, token = clerk
     assert auth.user_id(token("user_1")) == "user_1"
-    for bad in (None, "Bearer junk", token("user_1", exp_in=-120), token("user_1", azp="https://evil.test")):
+    for bad in (
+        None,
+        "Bearer junk",
+        token("user_1", exp_in=-120),
+        token("user_1", azp="https://evil.test"),
+        token("user_1", issuer="https://other.clerk.accounts.dev"),
+        token("user_1", issuer=None),
+    ):
         with pytest.raises(AuthError):
             auth.user_id(bad)
 
@@ -76,7 +85,9 @@ def test_api_isolation_between_users_and_api_keys(tmp_path, clerk):
 
     assert client.get("/api/vehicles").status_code == 401
     assert client.put(f"/api/vehicles/{car['vin']}", json=car, headers=alice).status_code == 200
-    assert client.put(f"/api/vehicles/{car['vin']}", json=car, headers=bob).status_code == 409
+    conflict = client.put(f"/api/vehicles/{car['vin']}", json=car, headers=bob)
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "This VIN is registered to another account"
     assert client.get("/api/vehicles", headers=bob).json() == []
     assert client.get(f"/api/vehicles/{car['vin']}/report", headers=bob).status_code == 404
 

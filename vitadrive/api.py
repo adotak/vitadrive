@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.cors import CORSMiddleware
 
 from . import __version__, assistant, costs, nearby, observability, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
@@ -31,6 +32,7 @@ from .models import (
     Vehicle,
 )
 from .ratelimit import Limit, RateLimited, RateLimiter, default_limits
+from .security import SecurityHeadersMiddleware, build_csp
 from .service import HealthReport, UnknownVehicle, VitaDrive
 from .storage import Store, current_db_revision
 
@@ -148,9 +150,24 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
     sentry_active = observability.init_sentry()
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
-    app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
-    vd = VitaDrive(Store(db or _default_db()))
     auth = auth or ClerkAuth.from_env()
+    cors_origins = [
+        origin.strip()
+        for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+        if origin.strip() and origin.strip() != "*"
+    ]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+            expose_headers=["X-Request-ID", "Retry-After"],
+        )
+    app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
+    app.add_middleware(SecurityHeadersMiddleware, csp=build_csp(auth.frontend_api))
+    vd = VitaDrive(Store(db or _default_db()))
     app_limits = default_limits()
     if limits is not None:
         app_limits.update(limits)
