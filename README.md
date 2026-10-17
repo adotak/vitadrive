@@ -125,6 +125,17 @@ vitadrive/
 
 ## Development
 
+### Changing the database schema
+
+Edit the tables in `vitadrive/storage.py`, then generate a migration:
+
+```bash
+alembic revision --autogenerate -m "describe the change"
+```
+
+Review the new migration file before committing it. It records the database change that other
+developers and deployments will apply.
+
 ```bash
 ruff check . && pytest
 # include the Postgres tests:

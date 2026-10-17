@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2.5",
     "uvicorn>=0.27",
     "sqlalchemy>=2.0",
+    "alembic>=1.13",
     "psycopg[binary]>=3.1",
     "pyjwt[crypto]>=2.8",
     "langchain-core>=0.3",
@@ -33,7 +34,8 @@ vitadrive = "vitadrive.cli:main"
 include = ["vitadrive*"]
 
 [tool.setuptools.package-data]
-vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*", "static/fonts/*"]
+vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*", "static/fonts/*",
+             "migrations/*.mako", "migrations/versions/*.py"]
 
 [tool.ruff]
 line-length = 120
