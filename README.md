@@ -141,6 +141,14 @@ mypy
 pytest --cov
 ```
 
+For browser end-to-end tests, install the extra and Chromium, then run:
+
+```bash
+pip install -e ".[e2e]"
+python -m playwright install chromium
+pytest e2e
+```
+
 ### Changing the database schema
 
 Edit the tables in `vitadrive/storage.py`, then generate a migration:

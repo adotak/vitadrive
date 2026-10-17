@@ -35,6 +35,10 @@ dev = [
     "pytest-cov>=5",
     "pre-commit>=3.7",
 ]
+e2e = [
+    "playwright>=1.45",
+    "pytest-playwright>=0.5",
+]
 
 [project.scripts]
 vitadrive = "vitadrive.cli:main"
@@ -48,6 +52,7 @@ vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*",
 
 [tool.ruff]
 line-length = 120
+extend-include = ["e2e/**/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B"]
@@ -74,3 +79,6 @@ branch = true
 fail_under = 85
 show_missing = true
 skip_covered = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
