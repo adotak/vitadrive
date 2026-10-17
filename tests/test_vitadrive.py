@@ -146,7 +146,9 @@ def test_installable_app_assets(tmp_path):
     for icon in manifest.json()["icons"]:
         assert client.get(icon["src"]).status_code == 200
     assert client.get("/favicon.ico").headers["content-type"] == "image/png"
-    assert client.get("/nope").json() == {"detail": "Not Found"}
+    not_found = client.get("/nope").json()
+    assert not_found["detail"] == "Not Found"
+    assert not_found["error"]["code"] == "not_found"
 
 
 def test_dashboard_typography_assets(tmp_path):
