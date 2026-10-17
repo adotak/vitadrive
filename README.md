@@ -4,6 +4,9 @@
 
 **Live:** https://vitadrive.vercel.app
 
+![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/adotak/vitadrive/badges/coverage.json)
+![CI](https://github.com/adotak/vitadrive/actions/workflows/ci.yml/badge.svg)
+
 VitaDrive collects telemetry from a car (OEM telematics / CAN gateway, OBD-II dongle, or the built-in simulator),
 checks every reading against safety thresholds, raises warnings and critical alerts, predicts when each
 maintenance item will be due, estimates remaining driving range, and keeps a permanent history of readings,
@@ -126,6 +129,15 @@ vitadrive/
 ```
 
 ## Development
+
+Install the development tools, enable the repository hooks, then run static checks and tests:
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+mypy
+pytest --cov
+```
 
 ### Changing the database schema
 
