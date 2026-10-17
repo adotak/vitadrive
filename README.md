@@ -1,222 +1,164 @@
 # VitaDrive
 
-**Vehicle vitals monitoring, threshold warnings, predictive maintenance and a full service record for modern cars.**
+**Turn vehicle telemetry into clear health alerts, maintenance forecasts, range estimates, and trip history.**
 
-**Live:** https://vitadrive.vercel.app
+[![CI](https://github.com/adotak/vitadrive/actions/workflows/ci.yml/badge.svg)](https://github.com/adotak/vitadrive/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/adotak/vitadrive/badges/coverage.json)](https://github.com/adotak/vitadrive/actions/workflows/ci.yml)
 
-![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/adotak/vitadrive/badges/coverage.json)
-![CI](https://github.com/adotak/vitadrive/actions/workflows/ci.yml/badge.svg)
+**Live demo:** [vitadrive.vercel.app](https://vitadrive.vercel.app)
 
-VitaDrive collects telemetry from a car (OEM telematics / CAN gateway, OBD-II dongle, or the built-in simulator),
-checks every reading against safety thresholds, raises warnings and critical alerts, predicts when each
-maintenance item will be due, estimates remaining driving range, and keeps a permanent history of readings,
-alerts and services. It runs as a headless service with a REST API, so it can be built into an in-vehicle
-infotainment unit, a fleet backend, or a phone companion app.
+![VitaDrive Overview dashboard](docs/images/overview.png)
 
-![Sign-in screen](docs/signin.jpg)
+![Dashboard tour: Overview, Trips, Maintenance, and map](docs/images/dashboard-tour.gif)
 
-![Dashboard](docs/dashboard.png)
+## What it does
 
-## Features
+- Monitors vehicle vitals and diagnostic codes, deduplicates alerts, and detects unusual combinations of sensor values.
+- Forecasts maintenance, estimates driving range, and exports service reminders to a calendar.
+- Records fuel and charging costs, detected trips (PR #11), and efficiency trends.
+- Finds nearby help, checks US safety recalls, and can send critical alerts as Web Push notifications.
+- Accepts readings from the REST API or the vehicle-side OBD-II bridge (PR #12), which buffers readings while offline.
+- Supports Clerk accounts, per-vehicle ingest keys, SQLite for local use, and PostgreSQL for deployment.
 
-| Area | What it does |
-|---|---|
-| **Monitoring** | 20+ vitals: engine oil level/life/pressure, coolant temp/level, brake fluid, front/rear pad thickness, 4x tire pressure (TPMS), tread depth, 12V battery, traction-battery charge/health/temp, fuel, transmission temp, washer fluid, OBD-II trouble codes (DTCs). |
-| **Threshold alerts** | Warning and critical limits per metric (low and/or high), filtered by powertrain (ICE / hybrid / EV). Safety-critical DTCs (misfire, ABS, airbag, HV system) are escalated. Alerts are de-duplicated, resolve automatically when a reading returns to normal, and can be dismissed. |
-| **Predictive maintenance** | 15 standard service items with distance *and* time intervals (whichever comes first). Distance limits are converted into calendar dates using the car's observed daily mileage. Wear items (brake pads, tires, oil life) use a regression of the sensor value vs. odometer to predict the exact date the limit will be hit. |
-| **Calendar reminders** | Download predicted service dates as an `.ics` file for Google Calendar, Apple Calendar or Outlook. Each service is an all-day event with the forecast basis and due odometer; future dates include a 1-day reminder and overdue items appear today. Import into a separate calendar and replace it when forecasts change: this is a snapshot, not a live subscription. Calendar apps control notification behavior. |
-| **Range estimate** | Remaining km from fuel/charge level using *learned* consumption from recent driving (refuel/recharge events ignored), falling back to rated consumption for new cars. |
-| **AI fault detector** | A small autoencoder trained with PyTorch on normal driving flags unusual *combinations* of live sensor values (e.g. one tire dropping while the others hold, a sagging 12V battery), often before any single threshold is crossed. The trained weights ship as JSON and run in plain Python, so the deployed app doesn't need PyTorch. |
-| **Ask VitaDrive** | Dashboard chat built with LangChain: ask "what needs attention on my car?" and it answers from that car's alerts, vitals, maintenance forecast, range and fault-detector result. Only the signed-in owner's car data is sent. Turned on by setting `OPENAI_API_KEY`. |
-| **Phone alerts** | A **Turn on alerts** button in the dashboard header subscribes the phone or computer to Web Push notifications. When a reading turns critical (e.g. a flat tire or low oil pressure), the owner gets a notification even with the site closed; tapping it opens that car. Each new critical condition notifies once, not on every reading. Works in Chrome, Edge, Firefox and Safari; on iPhone/iPad only in the installed app (Share → **Add to Home Screen**). Turned on by setting `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (generate them with `vitadrive vapid-keys`). |
-| **Nearby help** | Finds the closest mechanics, tire shops, parts stores, dealers or EV chargers for what the car needs right now (e.g. a tire warning suggests tire shops). Uses your browser location or a typed city/postcode, shows them on a map with distance, opening hours, phone and a Google Maps **Directions** link. Data comes from OpenStreetMap, so no maps API key or billing is needed: all public Overpass mirrors are asked at once, and Nominatim is used as a backup when they are busy. |
-| **Safety recalls** | Checks the car's make, model and year against the official US recall database (NHTSA) and lists published recalls, newest first, with the affected part, what can go wrong, the fix, and "don't drive" / "park outside" flags. No API key needed; results are cached for 6 hours. |
-| **Model photo** | The dashboard header shows a photo of the car's model, taken from its Wikipedia article (credited and linked). If no photo is found the header simply stays plain. |
-| **Fuel & charging costs** | Log each fill-up or charge (amount, price, odometer, station) and the dashboard shows cost per km, spend this month, average price per litre/kWh, *real* consumption (fill-to-fill method) and a 6-month spending chart. Demo cars come with simulated fill-ups and charges. |
-| **Trip history** | Track trips from consecutive sensor readings, review recent distance and speed, and compare real fuel or energy consumption with the vehicle's rated efficiency. |
-| **Records** | Permanent log (Postgres in production, SQLite locally) of every reading, alert and service (date, odometer, cost, shop, notes). Logging a service resets its schedule and resolves related alerts. |
-| **Integrations** | REST API (OpenAPI docs at `/docs`), OBD-II adapter (ELM327 via `python-obd`), realistic simulator, web dashboard, CLI. |
-| **Accounts & security** | Clerk login on the dashboard. Each user only sees their own vehicles, and every car sends data with its own API key. Database-backed request limits help protect the API from abuse. |
-| **Installable app** | Web app manifest and icons, so the dashboard can be installed from the browser ("Add to Home Screen" / "Install app") and opens full-screen like a native app. |
-| **Deployment** | Vercel (serverless) + Supabase Postgres. SQLite still works for local use. See [docs/DEPLOY.md](docs/DEPLOY.md). |
+The dashboard includes responsive **Trips**, **Health**, and Overview views:
+
+| Trips | Health | Mobile Overview |
+|---|---|---|
+| ![Trips dashboard](docs/images/trips.png) | ![Vehicle health dashboard](docs/images/health.png) | ![Mobile Overview dashboard](docs/images/overview-mobile.png) |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    bridge["OBD-II bridge"] -->|vehicle API key| api["FastAPI on Vercel"]
+    clients["REST clients"] --> api
+    browser["Browser SPA<br/>native ES modules"] -->|Clerk session| api
+    api --> security["Clerk JWT · API keys<br/>DB rate limits · CSP"]
+    api --> services["Service layer<br/>monitor · anomaly JSON · maintenance<br/>range · trips · retention"]
+    services --> sqlalchemy["SQLAlchemy Core"]
+    sqlalchemy --> postgres["Supabase PostgreSQL"]
+    sqlalchemy --> sqlite["SQLite"]
+    cron["Vercel Cron"] --> prune["/api/cron/prune"]
+    prune --> services
+    services -. optional errors and traces .-> sentry["Sentry"]
+```
+
+See [the architecture guide](docs/ARCHITECTURE.md) for the request lifecycle,
+schema and migrations, authentication modes, retention, and configuration.
+
+## Tech decisions
+
+| Decision | Why | Trade-off |
+|---|---|---|
+| FastAPI | Typed request validation, OpenAPI, and one API that serves both the dashboard and REST clients. | Application behavior follows FastAPI/Starlette middleware and dependency semantics. |
+| SQLAlchemy Core + Alembic | Explicit queries support SQLite and PostgreSQL; migrations make schema changes reproducible. | Schema changes and migration scripts require deliberate, manual review. |
+| Database-backed rate limits | Counters are shared across short-lived Vercel instances. | Limited requests add database work and depend on database availability. |
+| Daily summaries after 30 days | Keeps long-term sensor trends while bounding raw-reading growth. | Older samples are represented by daily aggregates, not individually retained readings. |
+| Vanilla ES modules, no build | The static dashboard can be served directly without a bundler or generated assets. | Module boundaries and imports are maintained by hand; modern browser module support is required. |
+| Anomaly model exported to JSON | Inference stays in plain Python without a PyTorch or NumPy runtime dependency. | Training is a separate PyTorch workflow and must export updated weights. |
+| Clerk JWT authentication | Public JWKS verification scopes vehicle data to the signed-in owner without storing passwords. | Deployed environments must configure Clerk; auth-off mode is only for trusted local development. |
+| Stdlib-only bridge with offline buffer | Runs beside the car, retries REST delivery, and keeps queued readings in local SQLite during outages. | The bridge must run continuously on a connected device and manage its local buffer. |
+| Strict script CSP | External modules and delegated actions avoid allowing inline script execution. | New UI behavior must use external modules rather than inline scripts or handlers. |
+
+## Quality
+
+- Python CI runs on **3.10 and 3.12**, with Ruff, mypy, and SQLite/PostgreSQL tests.
+- Coverage is measured with branch tracking and gated at **85%**.
+- Playwright E2E tests cover browser navigation and core dashboard workflows.
+- Lighthouse CI gates accessibility and best practices at **95**, and performance at **85**.
+- Docker CI builds and starts the Compose stack, seeds demo data, and checks health and API responses.
+- `pip-audit` checks dependencies; Dependabot proposes weekly Python and GitHub Actions updates.
+- On this branch, `pytest --cov` reports **181 passed, 7 skipped; 89.21% total coverage** (85% required).
+
+## Lessons learned
+
+- Existing databases need careful Alembic adoption: a safe stamp can preserve compatible legacy data, while partial schemas must fail rather than be guessed at.
+- In-memory rate counters do not coordinate across serverless instances, so shared limits belong in the database; that consistency costs a write on limited requests.
+- A strict CSP exposed dashboard handlers that depended on inline `onclick` attributes. Native modules and delegated `data-action` events removed that script exception.
+- Lighthouse surfaced contrast and third-party image findings. Anonymous image requests and a stronger muted-text token improved the audit without introducing a maps or image API key.
+- Raw sensor readings can be compacted without erasing trip history because trips are persisted separately from daily reading summaries.
 
 ## Quick start
 
+### Local
+
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-vitadrive demo                 # seeds 180 days of simulated data for a petrol car and an EV
-vitadrive report VDDEMOICE0000001
-vitadrive serve                # dashboard at http://127.0.0.1:8000, API docs at /docs
+vitadrive demo --days 60
+vitadrive serve
 ```
 
-## Run with Docker
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Local use defaults to
+SQLite and auth-off mode; do not expose that configuration publicly.
 
-Docker Compose starts VitaDrive with a local Postgres database. The Compose database credentials (`vitadrive` / `vitadrive`)
-are for local development only; the database port is not published to the host. Set optional keys in your environment
-before starting the app if you want to enable Clerk, OpenAI, Sentry or the cron endpoint.
+### Docker
 
 ```bash
 docker compose up --build
-```
-
-In a second terminal, seed the database with demo vehicles:
-
-```bash
 docker compose run --rm app vitadrive demo
 ```
 
-Open http://localhost:8000. When finished, stop the app and remove its local database volume with:
+Open [http://localhost:8000](http://localhost:8000). The database port is not
+published to the host. Stop the stack and remove its local volume with
+`docker compose down -v`.
 
-```bash
-docker compose down -v
-```
+### OBD-II bridge
 
-The Linux/amd64 image is about **106 MB** to download (compressed) and **458 MB** on disk once unpacked; sizes change as
-dependency versions update.
-
-Live data from a car with an OBD-II dongle:
+Install the optional adapter support on a device connected to the vehicle,
+then send readings to a running VitaDrive server:
 
 ```bash
 pip install -e ".[obd]"
-vitadrive bridge <VIN> --url https://vitadrive.example.com
+vitadrive bridge <VIN> --url https://<your-vita-drive-host> --api-key <vehicle-api-key>
 ```
 
-See [docs/obd-bridge.md](docs/obd-bridge.md) for adapter setup, API-key instructions, simulation and dry-run commands,
-offline buffering, and a Raspberry Pi service example. `vitadrive obd <VIN>` remains available for local-database use.
+See the [OBD bridge guide](docs/obd-bridge.md) for hardware, simulation,
+buffering, and service setup. For Vercel, Supabase, Clerk, and environment
+variables, see the [deployment guide](docs/DEPLOY.md).
 
-## Integrating with a vehicle
+## Project layout
 
-Register the vehicle, issue it an API key, then have the car's gateway push a reading whenever new data is
-available (any field can be omitted). The examples below use a local server without login; on a deployed
-instance, register the car and get its key from the dashboard instead.
-
-```bash
-curl -X PUT localhost:8000/api/vehicles/1HGCM82633A004352 -H 'content-type: application/json' \
-  -d '{"vin":"1HGCM82633A004352","make":"Honda","model":"Civic","year":2024,"powertrain":"ice","tank_capacity_l":47}'
-
-KEY=$(curl -s -X POST localhost:8000/api/vehicles/1HGCM82633A004352/api-key | python3 -c 'import sys,json;print(json.load(sys.stdin)["api_key"])')
-
-curl -X POST localhost:8000/api/vehicles/1HGCM82633A004352/readings -H "X-API-Key: $KEY" -H 'content-type: application/json' \
-  -d '{"vin":"1HGCM82633A004352","odometer_km":42010,"engine_oil_life_pct":12,"tire_pressure_fl_kpa":195,"dtc_codes":["P0420"]}'
-# -> returns any newly raised alerts
-```
-
-| Endpoint | Purpose |
-|---|---|
-| `PUT /api/vehicles/{vin}` | Register / update a vehicle |
-| `POST /api/vehicles/{vin}/api-key` | Issue a new ingest API key (shown once) |
-| `POST /api/vehicles/{vin}/readings` | Ingest telemetry (`X-API-Key` header), returns new alerts |
-| `GET /api/vehicles/{vin}/report` | Overall status, latest vitals, active alerts, maintenance forecast, range |
-| `GET /api/vehicles/{vin}/maintenance` | Due date / km remaining for every service item |
-| `GET /api/vehicles/{vin}/maintenance/calendar.ics` | Owner-only iCalendar download; requires at least one sensor reading |
-| `GET /api/vehicles/{vin}/range` | Remaining range estimate |
-| `GET/POST /api/vehicles/{vin}/services` | Service history / log a service |
-| `GET /api/vehicles/{vin}/alerts?active_only=true` | Alert log |
-| `POST /api/alerts/{id}/ack` | Dismiss an alert |
-
-## Going live
-
-Deploy on **Vercel** with a **Supabase** Postgres database and **Clerk** login. The step-by-step guide is in
-[docs/DEPLOY.md](docs/DEPLOY.md). Settings are read from environment variables (see `.env.example`):
-`DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_AUTHORIZED_PARTIES`, and optionally `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
-(phone alerts) and `OPENAI_API_KEY` (chat).
-
-See [SECURITY.md](SECURITY.md) for the security model and private vulnerability reporting instructions.
-
-Troubleshooting:
-
-- **Every page says `{"detail":"Not Found"}`**: check that the Vercel *Framework Preset* is **FastAPI** and that the
-  entrypoint is the root `app.py`, then redeploy without the build cache.
-- **"Token issued for an unauthorized origin" after signing in**: `CLERK_AUTHORIZED_PARTIES` doesn't list the
-  address the login came from (the error names it). Set it to your site URL, e.g. `https://vitadrive.vercel.app`,
-  and redeploy.
-- **No "Turn on alerts" button**: the VAPID keys aren't set (or the deploy predates them), or the browser doesn't
-  support push. On iPhone it only appears in the app opened from the home screen.
-- **"Development mode" under the sign-in box**: Clerk test keys (`pk_test_...`) are in use. Production keys
-  require your own domain.
-
-## Customising
-
-Thresholds live in `vitadrive/thresholds.py` and the service schedule in `vitadrive/maintenance.py`. Pass your
-own rule set / schedule to `HealthMonitor(rules=...)` and `MaintenancePlanner(schedule=...)` to match a specific
-manufacturer's specs.
-
-```
+```text
 vitadrive/
-  models.py           data models (Vehicle, SensorReading, Alert, ServiceRecord, ...)
-  thresholds.py       warning/critical limits per metric
-  monitor.py          threshold + DTC evaluation
-  maintenance.py      schedule and due-date prediction
-  range_estimator.py  remaining range
-  storage.py          SQLite / PostgreSQL history (SQLAlchemy)
-  auth.py             Clerk session verification
-  demo.py             simulated demo vehicles
-  service.py          orchestration (ingest, report)
-  api.py              FastAPI REST API + dashboard
-  cli.py              command line
-  adapters/           simulator, OBD-II
+  adapters/            OBD-II and simulated reading sources
+  migrations/          Alembic environment and revisions 0001–0004
+  static/js/           Browser-native dashboard ES modules; no build step
+  api.py               FastAPI routes and error handling
+  anomaly.py           JSON-backed anomaly inference
+  bridge.py            Vehicle-side delivery, retries, and offline buffer
+  service.py           Monitoring and reporting orchestration
+  storage.py           SQLAlchemy Core tables and persistence
+  trips.py             Trip detection and efficiency summaries
+docs/
+  adr/                 Architecture decision records
+  images/              Dashboard screenshots and tour
+  ARCHITECTURE.md       Request, data, deployment, and configuration reference
+tests/                 Unit, API, migration, and documentation tests
+e2e/                   Playwright browser tests
 ```
 
-The dashboard uses plain ES modules in `vitadrive/static/js/`; no build step is required.
+## Project docs
 
-## Development
+- [Architecture and environment variables](docs/ARCHITECTURE.md)
+- [Architecture decision records](docs/adr/README.md)
+- [Deployment guide](docs/DEPLOY.md)
+- [OBD-II bridge guide](docs/obd-bridge.md)
+- [Contributing and development checks](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
 
-Install the development tools, enable the repository hooks, then run static checks and tests:
-
-```bash
-pip install -e ".[dev]"
-pre-commit install
-mypy
-pytest --cov
-```
-
-For browser end-to-end tests, install the extra and Chromium, then run:
-
-```bash
-pip install -e ".[e2e]"
-python -m playwright install chromium
-pytest e2e
-```
-
-Latest Lighthouse medians (performance / accessibility / best practices / SEO): desktop 100 / 100 / 100 / 100; mobile 92 / 100 / 100 / 100. CI gates accessibility ≥95, best practices ≥95, and performance ≥85:
-
-```bash
-npx @lhci/cli autorun
-```
-
-### Changing the database schema
-
-Edit the tables in `vitadrive/storage.py`, then generate a migration:
-
-```bash
-alembic revision --autogenerate -m "describe the change"
-```
-
-Review the new migration file before committing it. It records the database change that other
-developers and deployments will apply.
-
-```bash
-ruff check . && pytest
-# include the Postgres tests:
-docker run -d -e POSTGRES_PASSWORD=devpass -e POSTGRES_DB=vitadrive -p 5432:5432 postgres:16
-VITADRIVE_TEST_POSTGRES=postgresql://postgres:devpass@localhost:5432/vitadrive pytest
-```
-
-Retrain the fault detector (needs PyTorch, only for training):
-
-```bash
-pip install torch
-python scripts/train_anomaly.py   # rewrites vitadrive/anomaly_model.json
-```
+The API's interactive schema is available at `/docs` when the app is running.
+Dashboard code is plain ES modules in `vitadrive/static/js/` with no build step.
 
 ## Limitations
 
-Standard OBD-II only exposes some metrics (coolant temp, fuel level, voltage, DTCs, odometer on newer cars).
-Fluid levels, pad wear, TPMS and HV-battery data are manufacturer-specific and should be sent through the REST API
-from the vehicle's own telematics or CAN gateway. Default thresholds and intervals are generic; always follow the
-owner's manual for a specific vehicle. Nearby shop results depend on OpenStreetMap coverage, which is good in most
-cities but can be sparse in rural areas. Recalls come from the US NHTSA database and are listed per model and year, not per
-VIN, so not every listed recall applies to a given car; check the VIN at https://www.nhtsa.gov/recalls.
+Standard OBD-II exposes only a subset of the monitored signals; several
+vehicle-specific metrics require manufacturer telematics or a CAN gateway.
+Default thresholds and service intervals are generic—follow the vehicle's
+owner manual. Nearby results depend on OpenStreetMap coverage, and recall
+results come from the US NHTSA database by model and year rather than VIN.
 
 ## License
 
