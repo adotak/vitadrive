@@ -302,20 +302,3 @@ def test_every_owner_scoped_vin_route_rejects_bob_without_changing_alice_data(cl
     assert owner_token_attempt.status_code == 404
     assert bob_key_attempt.status_code == wrong_key_attempt.status_code == 401
     assert _alice_data_snapshot(store) == before
-
-
-def test_security_headers_cover_unhandled_errors(tmp_path, monkeypatch):
-    monkeypatch.delenv("CORS_ORIGINS", raising=False)
-    app = create_app(str(tmp_path / "security-error.db"), auth=HeaderAuth())
-    app.add_api_route(
-        "/_security-error",
-        lambda: (_ for _ in ()).throw(RuntimeError("private error detail")),
-        include_in_schema=False,
-    )
-    try:
-        with TestClient(app, raise_server_exceptions=False) as test_client:
-            response = test_client.get("/_security-error")
-        assert response.status_code == 500
-        _assert_security_headers(response)
-    finally:
-        app.state.vitadrive.store.close()

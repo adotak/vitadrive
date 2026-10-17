@@ -39,14 +39,11 @@ def build_csp(clerk_frontend_api: str | None) -> str:
 
 
 class SecurityHeadersMiddleware:
-    """ASGI wrapper that adds security headers outside the framework's error middleware."""
+    """Pure ASGI middleware that adds security headers to HTTP responses."""
 
     def __init__(self, app, csp: str):
         self.app = app
         self.csp = csp
-
-    def __getattr__(self, name):
-        return getattr(self.app, name)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":

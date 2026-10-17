@@ -145,11 +145,12 @@ def _default_db() -> str:
 
 
 def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
-               limits: dict[str, Limit] | None = None) -> SecurityHeadersMiddleware:
+               limits: dict[str, Limit] | None = None) -> FastAPI:
     observability.configure_logging()
     sentry_active = observability.init_sentry()
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
+    auth = auth or ClerkAuth.from_env()
     cors_origins = [
         origin.strip()
         for origin in os.environ.get("CORS_ORIGINS", "").split(",")
@@ -165,8 +166,8 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             expose_headers=["X-Request-ID", "Retry-After"],
         )
     app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
+    app.add_middleware(SecurityHeadersMiddleware, csp=build_csp(auth.frontend_api))
     vd = VitaDrive(Store(db or _default_db()))
-    auth = auth or ClerkAuth.from_env()
     app_limits = default_limits()
     if limits is not None:
         app_limits.update(limits)
@@ -479,13 +480,13 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             raise HTTPException(401, "Invalid cron authorization")
         return retention.prune(vd.store)
 
-    return SecurityHeadersMiddleware(app, build_csp(auth.frontend_api))
+    return app
 
 
-_app: SecurityHeadersMiddleware | None = None
+_app: FastAPI | None = None
 
 
-def get_app() -> SecurityHeadersMiddleware:
+def get_app() -> FastAPI:
     global _app
     if _app is None:
         _app = create_app()
