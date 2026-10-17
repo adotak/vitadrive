@@ -15,7 +15,13 @@ You need accounts on all three (each has a free tier). About 15 minutes.
 3. Copy the **Transaction pooler** connection string (host `...pooler.supabase.com`, port **6543**). Replace `[YOUR-PASSWORD]` with your database password.
    Serverless functions open many short connections, and the pooler handles that.
 
-You don't need to create any tables. VitaDrive creates them the first time it starts.
+### Database migrations
+
+VitaDrive creates and updates database tables automatically with Alembic when it starts. If you already
+have a database from an older VitaDrive version, it is detected and marked as version 0001 automatically;
+there is nothing you need to click or change. To run an upgrade yourself, use
+`DATABASE_URL=... vitadrive db upgrade`. To manage migrations manually instead, set
+`VITADRIVE_AUTO_MIGRATE=0`.
 
 ## 2. Clerk (login)
 
