@@ -89,6 +89,8 @@ Deploy on **Vercel** with a **Supabase** Postgres database and **Clerk** login. 
 `DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_AUTHORIZED_PARTIES`, and optionally `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
 (phone alerts) and `OPENAI_API_KEY` (chat).
 
+See [SECURITY.md](SECURITY.md) for the security model and private vulnerability reporting instructions.
+
 Troubleshooting:
 
 - **Every page says `{"detail":"Not Found"}`**: check that the Vercel *Framework Preset* is **FastAPI** and that the
