@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import threading
 from collections.abc import Iterator
@@ -29,7 +30,9 @@ from sqlalchemy import (
     create_engine,
     event,
     insert,
+    inspect,
     select,
+    text,
     update,
 )
 from sqlalchemy.pool import NullPool
@@ -104,6 +107,71 @@ def database_url(target: str | Path) -> str:
     return f"sqlite:///{target}"
 
 
+def _create_engine(target: str | Path):
+    url = database_url(target)
+    if url.startswith("sqlite"):
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+        event.listen(engine, "connect", lambda c, _: c.execute("PRAGMA foreign_keys = ON"))
+        return engine
+    return create_engine(url, poolclass=NullPool, connect_args={"prepare_threshold": None})
+
+
+def _alembic_config(connection: Connection):
+    from alembic.config import Config
+
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).parent / "migrations"))
+    config.attributes["connection"] = connection
+    return config
+
+
+def _lock_migrations(connection: Connection) -> None:
+    if connection.dialect.name == "postgresql":
+        connection.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                           {"lock_id": 0x5649544144524956})
+
+
+def upgrade_db(engine, revision: str = "head") -> None:
+    """Apply migrations, safely adopting databases created before Alembic was used."""
+    from alembic import command
+
+    app_tables = {"vehicles", "readings", "alerts", "services", "fuel_logs", "push_subscriptions"}
+    with engine.begin() as connection:
+        _lock_migrations(connection)
+        tables = set(inspect(connection).get_table_names())
+        config = _alembic_config(connection)
+        if "alembic_version" not in tables and "vehicles" in tables:
+            missing = sorted(app_tables - tables)
+            if missing:
+                raise RuntimeError(
+                    "Cannot migrate a partial legacy database: found 'vehicles' but missing "
+                    f"application tables: {', '.join(missing)}."
+                )
+            command.stamp(config, "0001")
+        command.upgrade(config, revision)
+
+
+def stamp_db(engine, revision: str) -> None:
+    from alembic import command
+
+    with engine.begin() as connection:
+        _lock_migrations(connection)
+        command.stamp(_alembic_config(connection), revision)
+
+
+def current_db_revision(engine) -> str | None:
+    from sqlalchemy import inspect
+
+    with engine.connect() as connection:
+        if "alembic_version" not in inspect(connection).get_table_names():
+            return None
+        return connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
+
+
+def _auto_migrate_enabled() -> bool:
+    return os.environ.get("VITADRIVE_AUTO_MIGRATE", "1").strip().lower() not in {"0", "false"}
+
+
 def hash_api_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
@@ -116,15 +184,13 @@ def _iso(ts: datetime) -> str:
 
 class Store:
     def __init__(self, target: str | Path = "vitadrive.db"):
-        url = database_url(target)
-        if url.startswith("sqlite"):
-            self.engine = create_engine(url, connect_args={"check_same_thread": False})
-            event.listen(self.engine, "connect", lambda c, _: c.execute("PRAGMA foreign_keys = ON"))
-        else:
-            # Serverless-friendly: no client-side pool (use Supabase's pooler), and no server-side
-            # prepared statements, which transaction-mode poolers don't support.
-            self.engine = create_engine(url, poolclass=NullPool, connect_args={"prepare_threshold": None})
-        metadata.create_all(self.engine)
+        self.engine = _create_engine(target)
+        try:
+            if _auto_migrate_enabled():
+                upgrade_db(self.engine)
+        except Exception:
+            self.engine.dispose()
+            raise
         self._local = threading.local()
 
     def close(self) -> None:

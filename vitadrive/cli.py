@@ -9,7 +9,14 @@ import time
 from .demo import DEMO_VEHICLES, seed_vehicle
 from .models import Severity
 from .service import VitaDrive
-from .storage import LOCAL_OWNER, Store
+from .storage import (
+    LOCAL_OWNER,
+    Store,
+    _create_engine,
+    current_db_revision,
+    stamp_db,
+    upgrade_db,
+)
 
 _COLORS = {Severity.OK: "\033[32m", Severity.INFO: "\033[36m", Severity.WARNING: "\033[33m",
            Severity.CRITICAL: "\033[31m"}
@@ -86,6 +93,30 @@ def cmd_obd(args) -> None:
         time.sleep(args.interval)
 
 
+def cmd_db_upgrade(args) -> None:
+    engine = _create_engine(args.db)
+    try:
+        upgrade_db(engine, args.revision)
+    finally:
+        engine.dispose()
+
+
+def cmd_db_stamp(args) -> None:
+    engine = _create_engine(args.db)
+    try:
+        stamp_db(engine, args.revision)
+    finally:
+        engine.dispose()
+
+
+def cmd_db_current(args) -> None:
+    engine = _create_engine(args.db)
+    try:
+        print(current_db_revision(engine) or "None")
+    finally:
+        engine.dispose()
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="vitadrive", description="Vehicle vitals monitoring & predictive maintenance")
     p.add_argument("--db", default=os.environ.get("DATABASE_URL", "vitadrive.db"),
@@ -120,6 +151,17 @@ def main(argv=None) -> None:
     o.add_argument("--odometer", type=float, default=None, help="Odometer if the car doesn't report it")
     o.add_argument("--interval", type=float, default=30)
     o.set_defaults(fn=cmd_obd)
+
+    db = sub.add_parser("db", help="Manage database migrations")
+    db_sub = db.add_subparsers(dest="db_cmd", required=True)
+    db_upgrade = db_sub.add_parser("upgrade", help="Apply database migrations")
+    db_upgrade.add_argument("revision", nargs="?", default="head")
+    db_upgrade.set_defaults(fn=cmd_db_upgrade)
+    db_stamp = db_sub.add_parser("stamp", help="Mark the database at a migration revision")
+    db_stamp.add_argument("revision")
+    db_stamp.set_defaults(fn=cmd_db_stamp)
+    db_current = db_sub.add_parser("current", help="Print the current database revision")
+    db_current.set_defaults(fn=cmd_db_current)
 
     args = p.parse_args(argv)
     args.fn(args)
