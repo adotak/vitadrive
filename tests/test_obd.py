@@ -38,7 +38,7 @@ def test_obd_adapter_reads_supported_metrics_without_hardware(monkeypatch) -> No
             response_value = SimpleNamespace(magnitude=value) if isinstance(value, (int, float)) else value
             return SimpleNamespace(is_null=lambda: value is None, value=response_value)
 
-    fake_obd = SimpleNamespace(commands=commands, OBD=lambda _port: FakeConnection())
+    fake_obd = SimpleNamespace(commands=commands, OBD=lambda _port, **_kwargs: FakeConnection())
     monkeypatch.setitem(sys.modules, "obd", fake_obd)
 
     reading = OBDAdapter("VDDEMOICE0000001").read()
@@ -61,9 +61,52 @@ def test_obd_adapter_requires_optional_extra(monkeypatch) -> None:
 def test_obd_adapter_rejects_disconnected_dongle(monkeypatch) -> None:
     fake_obd = SimpleNamespace(
         commands=SimpleNamespace(),
-        OBD=lambda _port: SimpleNamespace(is_connected=lambda: False),
+        OBD=lambda _port, **_kwargs: SimpleNamespace(is_connected=lambda: False),
     )
     monkeypatch.setitem(sys.modules, "obd", fake_obd)
 
-    with pytest.raises(RuntimeError, match="Could not connect"):
-        OBDAdapter("VDDEMOICE0000001")
+    adapter = OBDAdapter("VDDEMOICE0000001")
+    assert not adapter.is_connected()
+    with pytest.raises(RuntimeError, match="disconnected"):
+        adapter.read()
+
+
+def test_obd_adapter_reconnects_with_connection_options(monkeypatch) -> None:
+    connections = [
+        SimpleNamespace(is_connected=lambda: False),
+        SimpleNamespace(is_connected=lambda: True),
+    ]
+    calls = []
+
+    def connect(port, **options):
+        calls.append((port, options))
+        return connections.pop(0)
+
+    fake_obd = SimpleNamespace(commands=SimpleNamespace(), OBD=connect)
+    monkeypatch.setitem(sys.modules, "obd", fake_obd)
+
+    adapter = OBDAdapter("VDDEMOICE0000001", port="/dev/rfcomm0", baudrate=38400, timeout=3, fast=True)
+
+    assert not adapter.is_connected()
+    assert adapter.reconnect()
+    assert calls == [
+        ("/dev/rfcomm0", {"baudrate": 38400, "timeout": 3, "fast": True}),
+        ("/dev/rfcomm0", {"baudrate": 38400, "timeout": 3, "fast": True}),
+    ]
+
+
+def test_obd_adapter_reconnects_when_closing_old_connection_fails(monkeypatch) -> None:
+    class BrokenConnection:
+        def is_connected(self):
+            return False
+
+        def close(self):
+            raise OSError("adapter disconnected")
+
+    connections = [BrokenConnection(), SimpleNamespace(is_connected=lambda: True)]
+    fake_obd = SimpleNamespace(commands=SimpleNamespace(), OBD=lambda _port, **_kwargs: connections.pop(0))
+    monkeypatch.setitem(sys.modules, "obd", fake_obd)
+
+    adapter = OBDAdapter("VDDEMOICE0000001")
+
+    assert adapter.reconnect()
