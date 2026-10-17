@@ -81,6 +81,11 @@ class VehicleSimulator:
             s["hv_battery_soc_pct"] = max(0, s["hv_battery_soc_pct"])
             s["hv_battery_soh_pct"] = max(0, cast(float, s["hv_battery_soh_pct"]) - km * 0.00004)
 
+    def advance(self, distance_km: float) -> None:
+        if distance_km < 0:
+            raise ValueError("distance_km must be non-negative")
+        self._drive(distance_km)
+
     def reading(self, timestamp: datetime) -> SensorReading:
         s, r = self.state, self.rng
         ice = self.vehicle.powertrain is not Powertrain.EV
