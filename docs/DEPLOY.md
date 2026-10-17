@@ -56,6 +56,21 @@ You can also run the clean-up yourself when needed:
 `DATABASE_URL=... vitadrive prune`. The summaries are included with recent readings, so maintenance
 forecasts are unaffected after old raw rows are compacted.
 
+## Logs and monitoring
+
+Application logs are JSON lines in **Vercel → Project → Logs**. Every response includes an `X-Request-ID`;
+search for that ID to find the matching access log. Use `/api/health` for uptime checks.
+
+To send errors to Sentry:
+
+1. Go to sentry.io, select the free **Developer** plan, click **Create Project**, and choose **FastAPI**.
+2. Copy the project's DSN.
+3. In Vercel, open **Project → Settings → Environment Variables**, add `SENTRY_DSN` with that value,
+   then **Redeploy**.
+
+`SENTRY_TRACES_SAMPLE_RATE` optionally controls performance tracing and defaults to `0` (off).
+Set `LOG_LEVEL` to change application log verbosity; it defaults to `INFO`.
+
 ## 2. Clerk (login)
 
 1. Go to https://dashboard.clerk.com, click **Create application**, and enable the sign-in methods you want (email, Google, ...).

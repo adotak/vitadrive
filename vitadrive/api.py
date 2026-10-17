@@ -1,17 +1,22 @@
 """REST API + web dashboard. Run locally with ``vitadrive serve``; on Vercel via the root ``app.py``."""
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from datetime import date
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import __version__, assistant, costs, nearby, push, retention, webinfo
+from . import __version__, assistant, costs, nearby, observability, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
 from .calendar import maintenance_calendar
 from .demo import DEMO_VEHICLES, seed_vehicle
@@ -27,9 +32,52 @@ from .models import (
 )
 from .ratelimit import Limit, RateLimited, RateLimiter, default_limits
 from .service import HealthReport, UnknownVehicle, VitaDrive
-from .storage import Store
+from .storage import Store, current_db_revision
 
 _STATIC = Path(__file__).parent / "static"
+_log = logging.getLogger("vitadrive")
+_ERROR_CODES = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    422: "validation_error",
+    429: "rate_limited",
+    502: "upstream_error",
+    503: "unavailable",
+    500: "internal_error",
+}
+
+
+def _request_id(request: Request) -> str | None:
+    return getattr(request.state, "request_id", None) or observability.request_id_var.get()
+
+
+def _error_response(
+    request: Request,
+    status: int,
+    detail,
+    message: str,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    request_id = _request_id(request)
+    response_headers = dict(headers or {})
+    if request_id is not None:
+        response_headers["X-Request-ID"] = request_id
+    return JSONResponse(
+        status_code=status,
+        content={
+            "detail": jsonable_encoder(detail),
+            "error": {
+                "status": status,
+                "code": _ERROR_CODES.get(status, "error"),
+                "message": message,
+                "request_id": request_id,
+            },
+        },
+        headers=response_headers,
+    )
 
 # Logging one of these services resolves open alerts whose metric starts with the prefix.
 _SERVICE_RESOLVES = {
@@ -96,8 +144,11 @@ def _default_db() -> str:
 
 def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
                limits: dict[str, Limit] | None = None) -> FastAPI:
+    observability.configure_logging()
+    sentry_active = observability.init_sentry()
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
+    app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
     vd = VitaDrive(Store(db or _default_db()))
     auth = auth or ClerkAuth.from_env()
     app_limits = default_limits()
@@ -108,13 +159,37 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
     app.state.vitadrive = vd
     app.state.rate_limiter = rate_limiter
 
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException):
+        message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        return _error_response(request, exc.status_code, exc.detail, message, exc.headers)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError):
+        errors = exc.errors()
+        first = errors[0] if errors else {}
+        location = ".".join(str(part) for part in first.get("loc", ()))
+        message = f"{location}: {first.get('msg', 'Invalid value')}" if location else first.get("msg", "Invalid value")
+        return _error_response(request, 422, errors, message)
+
     @app.exception_handler(RateLimited)
-    async def rate_limit_error(_request, exc: RateLimited):
-        return JSONResponse(
-            status_code=429,
-            content={"detail": str(exc)},
-            headers={"Retry-After": str(exc.retry_after)},
+    async def rate_limit_error(request: Request, exc: RateLimited):
+        return _error_response(
+            request,
+            429,
+            str(exc),
+            str(exc),
+            {"Retry-After": str(exc.retry_after)},
         )
+
+    @app.exception_handler(Exception)
+    async def unhandled_error(request: Request, _exc: Exception):
+        token = observability.request_id_var.set(_request_id(request))
+        try:
+            _log.exception("Unhandled request exception")
+        finally:
+            observability.request_id_var.reset(token)
+        return _error_response(request, 500, "Internal server error", "Internal server error")
 
     def current_user(authorization: str | None = Header(default=None)) -> str:
         try:
@@ -179,7 +254,21 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
 
     @app.get("/api/health", include_in_schema=False)
     def health():
-        return {"ok": True, "version": __version__}
+        try:
+            with vd.store.transaction() as connection:
+                connection.execute(text("SELECT 1")).scalar_one()
+            revision = current_db_revision(vd.store.engine)
+        except Exception:
+            _log.exception("Database health check failed")
+            return JSONResponse(
+                status_code=503,
+                content={"ok": False, "version": __version__, "database": "error"},
+                headers={"Cache-Control": "no-store"},
+            )
+        return JSONResponse(
+            content={"ok": True, "version": __version__, "database": "ok", "db_revision": revision},
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/api/vehicles", response_model=list[Vehicle])
     def list_vehicles(user: str = Depends(current_user)):
