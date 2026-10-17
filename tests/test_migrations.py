@@ -14,6 +14,7 @@ from vitadrive.storage import (
     database_url,
     metadata,
     rate_limits_t,
+    readings_daily_t,
     upgrade_db,
     vehicles_t,
 )
@@ -39,7 +40,7 @@ def _legacy_vehicle(engine):
 def test_fresh_sqlite_database_matches_models(tmp_path):
     store = Store(tmp_path / "fresh.db")
     try:
-        assert current_db_revision(store.engine) == "0002"
+        assert current_db_revision(store.engine) == "0003"
         _assert_matches_models(store.engine)
     finally:
         store.close()
@@ -49,13 +50,14 @@ def test_legacy_sqlite_database_is_stamped_without_data_loss(tmp_path):
     path = tmp_path / "legacy.db"
     engine = create_engine(database_url(path))
     metadata.create_all(engine)
+    readings_daily_t.drop(engine)
     rate_limits_t.drop(engine)
     _legacy_vehicle(engine)
     engine.dispose()
 
     store = Store(path)
     try:
-        assert current_db_revision(store.engine) == "0002"
+        assert current_db_revision(store.engine) == "0003"
         with store.engine.connect() as connection:
             assert connection.execute(
                 text("SELECT owner_id FROM vehicles WHERE vin = 'LEGACY00000000001'")
@@ -71,7 +73,7 @@ def test_opening_store_twice_is_idempotent(tmp_path):
     first.close()
     second = Store(path)
     try:
-        assert current_db_revision(second.engine) == "0002"
+        assert current_db_revision(second.engine) == "0003"
         _assert_matches_models(second.engine)
     finally:
         second.close()
@@ -103,7 +105,7 @@ def test_cli_db_current_upgrade_and_stamp(tmp_path, capsys):
     assert capsys.readouterr().out.strip() == "None"
     main(["--db", str(path), "db", "upgrade"])
     main(["--db", str(path), "db", "current"])
-    assert capsys.readouterr().out.strip() == "0002"
+    assert capsys.readouterr().out.strip() == "0003"
 
     stamped_path = tmp_path / "stamped.db"
     stamped_engine = create_engine(database_url(stamped_path))
@@ -121,7 +123,7 @@ def test_sqlite_upgrade_downgrade_and_upgrade_again(tmp_path):
             command.downgrade(_alembic_config(connection), "base")
         assert current_db_revision(store.engine) is None
         upgrade_db(store.engine)
-        assert current_db_revision(store.engine) == "0002"
+        assert current_db_revision(store.engine) == "0003"
         _assert_matches_models(store.engine)
     finally:
         store.close()
@@ -151,7 +153,7 @@ def postgres_engine():
 def test_fresh_postgres_database_matches_models(postgres_engine):
     store = Store(PG_URL)
     try:
-        assert current_db_revision(store.engine) == "0002"
+        assert current_db_revision(store.engine) == "0003"
         _assert_matches_models(store.engine)
     finally:
         store.close()
@@ -159,12 +161,13 @@ def test_fresh_postgres_database_matches_models(postgres_engine):
 
 def test_legacy_postgres_database_is_stamped_without_data_loss(postgres_engine):
     metadata.create_all(postgres_engine)
+    readings_daily_t.drop(postgres_engine)
     rate_limits_t.drop(postgres_engine)
     _legacy_vehicle(postgres_engine)
 
     store = Store(PG_URL)
     try:
-        assert current_db_revision(store.engine) == "0002"
+        assert current_db_revision(store.engine) == "0003"
         with store.engine.connect() as connection:
             assert connection.execute(
                 text("SELECT owner_id FROM vehicles WHERE vin = 'LEGACY00000000001'")
