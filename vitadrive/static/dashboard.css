@@ -16,7 +16,7 @@
   --bg: #f5f6f2;
   --card: #fff;
   --fg: #233d35;
-  --mute: #697770;
+  --mute: #616f68;
   --line: #e3e8e1;
   --forest: #173e35;
   --accent: #d6edab;
@@ -123,6 +123,7 @@ button.chip:hover { background: #e9efdf; border-color: #becdb9; }
 .hero-card .chip { color: #e0eadd; border-color: #ffffff24; background: #173e35c0; font-size: 10px; }
 .hero-updated { font-size: 10px; color: #c4d6c9; }
 .hero-photo { position: absolute; inset: 0 0 0 auto; width: 58%; background: center/cover no-repeat url('/static/img/cockpit.jpg'); opacity: .3; mask-image: linear-gradient(90deg, transparent, #000); -webkit-mask-image: linear-gradient(90deg, transparent, #000); transition: opacity .4s; }
+.hero-photo-image { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hero-photo.on { opacity: .38; }
 .hero-photo::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, #173e35b0, #173e3520); }
 .hero-card .photo-credit { position: absolute; right: 12px; bottom: 8px; color: #d7e3dc; font-size: 10px; text-decoration: none; }
@@ -401,6 +402,9 @@ details.revealing[open] > :not(summary) { animation: reveal .3s ease both; }
 @keyframes grow { from { transform: scaleY(0); } }
 @keyframes drift { to { transform: scale(1.07) translateX(-1.5%); } }
 @keyframes ring-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 10px transparent; } }
+@media (max-width: 900px) {
+  .range-caption { font-size: 12px; }
+}
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }

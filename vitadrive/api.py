@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
+from starlette.types import Scope
 
 from . import __version__, assistant, costs, nearby, observability, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
@@ -53,6 +54,14 @@ _ERROR_CODES = {
     500: "internal_error",
 }
 _T = TypeVar("_T")
+
+
+class CachedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if path not in {"index.html", "sw.js"} and response.status_code == 200:
+            response.headers.setdefault("Cache-Control", "public, max-age=3600")
+        return response
 
 
 def _request_id(request: Request) -> str | None:
@@ -248,7 +257,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm: Any = 
         except UnknownVehicle:
             raise HTTPException(404, "Vehicle not registered") from None
 
-    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+    app.mount("/static", CachedStaticFiles(directory=_STATIC), name="static")
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
