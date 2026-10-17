@@ -3,13 +3,13 @@ import {state} from "./state.js";
 import {collapsible, esc, fmtDate, $} from "./util.js";
 
 export async function loadPhoto(forVin) {
-  const el = $("#heroPhoto"), credit = $("#photoCredit");
+  const el = $("#heroPhoto"), img = $("#heroImage"), credit = $("#photoCredit");
   el.classList.remove("on"); credit.hidden = true;
   const p = await api(`/api/vehicles/${forVin}/photo`, {quiet: true}).catch(() => null);
   if (!p || forVin !== state.vin) return;
-  const img = new Image();
-  img.onload = () => { if (forVin !== state.vin) return; el.style.backgroundImage = `url("${p.image.replace(/["\\\n]/g, encodeURIComponent)}")`; el.classList.add("on");
+  img.onload = () => { if (forVin !== state.vin) return; el.style.backgroundImage = "none"; el.classList.add("on");
     credit.title = p.title; credit.hidden = !p.page_url.startsWith("https://"); if (!credit.hidden) credit.href = p.page_url; };
+  img.crossOrigin = "anonymous";
   img.src = p.image;
 }
 

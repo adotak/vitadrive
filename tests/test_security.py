@@ -63,6 +63,16 @@ def test_security_headers_cover_dashboard_health_errors_and_static_files(client)
         _assert_security_headers(response)
 
 
+def test_static_assets_are_cached_but_document_worker_and_api_are_not(client):
+    static = client.get("/static/dashboard.css")
+    assert static.headers["Cache-Control"] == "public, max-age=3600"
+
+    for path in ("/", "/static/index.html", "/static/sw.js", "/api/health"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.headers.get("Cache-Control") != "public, max-age=3600"
+
+
 def test_csp_allows_dashboard_resources():
     directives = {
         item.strip().split(" ", 1)[0]: item.strip().split(" ", 1)[1]
