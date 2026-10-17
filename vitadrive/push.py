@@ -9,10 +9,12 @@ import base64
 import json
 import logging
 import os
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, field_validator
 
-from .models import Alert, Severity
+from .models import Alert, Severity, Vehicle
+from .storage import Store
 
 log = logging.getLogger(__name__)
 DEFAULT_SUBJECT = "mailto:alerts@vitadrive.app"
@@ -64,13 +66,15 @@ def enabled() -> bool:
     return bool(_env("VAPID_PUBLIC_KEY") and _env("VAPID_PRIVATE_KEY"))
 
 
-def _deliver(sub: dict, data: str, ttl: int) -> int:
+def _deliver(sub: dict[str, Any], data: str, ttl: int) -> int:
     """Send one push message; returns the push service's HTTP status (0 if it couldn't be reached)."""
     from pywebpush import WebPushException, webpush
 
     try:
-        return webpush(subscription_info=sub, data=data, vapid_private_key=_env("VAPID_PRIVATE_KEY"),
-                       vapid_claims={"sub": _env("VAPID_SUBJECT") or DEFAULT_SUBJECT}, ttl=ttl, timeout=5).status_code
+        return cast(int, webpush(
+            subscription_info=sub, data=data, vapid_private_key=_env("VAPID_PRIVATE_KEY"),
+            vapid_claims={"sub": _env("VAPID_SUBJECT") or DEFAULT_SUBJECT}, ttl=ttl, timeout=5,
+        ).status_code)
     except WebPushException as exc:
         return exc.response.status_code if exc.response is not None else 0
     except Exception as exc:  # network errors must never break reading ingestion
@@ -78,7 +82,7 @@ def _deliver(sub: dict, data: str, ttl: int) -> int:
         return 0
 
 
-def send_to_user(store, owner_id: str, payload: dict, ttl: int = 86_400) -> int:
+def send_to_user(store: Store, owner_id: str, payload: dict[str, Any], ttl: int = 86_400) -> int:
     """Push ``payload`` to every device the user turned alerts on for. Returns how many accepted it."""
     if not enabled():
         return 0
@@ -92,14 +96,14 @@ def send_to_user(store, owner_id: str, payload: dict, ttl: int = 86_400) -> int:
     return sent
 
 
-def alert_payload(vehicle, alerts: list[Alert]) -> dict:
+def alert_payload(vehicle: Vehicle, alerts: list[Alert]) -> dict[str, str]:
     n = len(alerts)
     return {"title": f"{vehicle.year} {vehicle.make} {vehicle.model}: {n} critical {'issue' if n == 1 else 'issues'}",
             "body": " · ".join(a.message for a in alerts[:3]) + (f" (+{n - 3} more)" if n > 3 else ""),
             "url": f"/?vin={vehicle.vin}", "tag": f"vitadrive-{vehicle.vin}"}
 
 
-def notify_critical(store, vin: str, alerts: list[Alert]) -> int:
+def notify_critical(store: Store, vin: str, alerts: list[Alert]) -> int:
     """Alert the owner about newly raised critical alerts. Never raises."""
     critical = [a for a in alerts if a.severity is Severity.CRITICAL]
     if not critical or not enabled():

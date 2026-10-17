@@ -8,8 +8,9 @@ import re
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from typing import Optional
+from typing import Any, Optional, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -33,7 +34,8 @@ FALLBACK_RADII_M = (5_000, 15_000, 40_000)
 NOMINATIM_DELAY_S = 1.1  # Nominatim allows one request per second
 MAX_PLACES = 8
 _CACHE_TTL_S = 600
-_cache: dict[tuple, tuple[float, object]] = {}
+_cache: dict[tuple[object, ...], tuple[float, object]] = {}
+_T = TypeVar("_T")
 
 # kind -> (label, Overpass tag filters)
 KINDS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -135,22 +137,22 @@ def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
-def _get_json(url: str, data: Optional[bytes] = None, timeout: float = 25):
+def _get_json(url: str, data: Optional[bytes] = None, timeout: float = 25) -> Any:
     req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (fixed https hosts)
         return json.load(resp)
 
 
-def _cached(key: tuple, fn):
+def _cached(key: tuple[object, ...], fn: Callable[[], _T]) -> _T:
     hit = _cache.get(key)
     if hit and time.monotonic() - hit[0] < _CACHE_TTL_S:
-        return hit[1]
+        return cast(_T, hit[1])
     val = fn()
     _cache[key] = (time.monotonic(), val)
     return val
 
 
-def _overpass_round(body: bytes, timeout: float) -> Optional[list[dict]]:
+def _overpass_round(body: bytes, timeout: float) -> Optional[list[dict[str, Any]]]:
     pool = ThreadPoolExecutor(len(OVERPASS_URLS))
     pending = {pool.submit(_get_json, url, body, timeout) for url in OVERPASS_URLS}
     try:
@@ -160,13 +162,13 @@ def _overpass_round(body: bytes, timeout: float) -> Optional[list[dict]]:
                 return None
             for fut in done:
                 if fut.exception() is None and isinstance(fut.result(), dict) and "elements" in fut.result():
-                    return fut.result()["elements"]
+                    return cast(list[dict[str, Any]], fut.result()["elements"])
         return None
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
 
-def overpass(query: str) -> list[dict]:
+def overpass(query: str) -> list[dict[str, Any]]:
     """Ask every Overpass mirror at once and use the first good answer (public mirrors are often busy or slow).
 
     Busy mirrors usually fail fast, so if a round fails quickly it is retried once.
@@ -186,7 +188,7 @@ def overpass(query: str) -> list[dict]:
 
 
 def geocode(q: str) -> tuple[float, float]:
-    def run():
+    def run() -> tuple[float, float]:
         url = NOMINATIM_URL + "?" + urllib.parse.urlencode({"q": q, "format": "json", "limit": 1})
         try:
             hits = _get_json(url, timeout=10)
@@ -199,13 +201,13 @@ def geocode(q: str) -> tuple[float, float]:
     return _cached(("geo", q.strip().lower()), run)
 
 
-def _address(tags: dict) -> Optional[str]:
+def _address(tags: dict[str, Any]) -> Optional[str]:
     street = " ".join(filter(None, (tags.get("addr:housenumber"), tags.get("addr:street"))))
     parts = [p for p in (street, tags.get("addr:city") or tags.get("addr:suburb"), tags.get("addr:postcode")) if p]
     return ", ".join(parts) or None
 
 
-def _place(el: dict, kind: str, lat: float, lon: float) -> Optional[Place]:
+def _place(el: dict[str, Any], kind: str, lat: float, lon: float) -> Optional[Place]:
     plat = el.get("lat", el.get("center", {}).get("lat"))
     plon = el.get("lon", el.get("center", {}).get("lon"))
     if plat is None or plon is None:
@@ -225,7 +227,7 @@ def _nominatim_places(lat: float, lon: float, kind: str, radius_m: int) -> list[
     dlon = dlat / max(math.cos(math.radians(lat)), 0.01)
     places: list[Place] = []
     for f in KINDS[kind][1]:
-        k, v = re.fullmatch(r'\["(.+)"="(.+)"\]', f).groups()
+        k, v = cast(re.Match[str], re.fullmatch(r'\["(.+)"="(.+)"\]', f)).groups()
         params = {"q": f"[{k}={v}]", "format": "jsonv2", "limit": 40, "bounded": 1, "extratags": 1,
                   "addressdetails": 1, "viewbox": f"{lon - dlon},{lat + dlat},{lon + dlon},{lat - dlat}"}
         try:
@@ -257,7 +259,7 @@ def search(lat: float, lon: float, kind: str) -> tuple[float, list[Place]]:
     """
     filters = KINDS[kind][1]
 
-    def run():
+    def run() -> tuple[float, list[Place]]:
         places: list[Place] = []
         radius = searched = RADII_M[0]
         try:

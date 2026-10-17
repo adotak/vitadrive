@@ -11,7 +11,7 @@ import json
 import math
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 from pydantic import BaseModel
 
@@ -40,11 +40,11 @@ class AnomalyResult(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def load_model() -> dict:
-    return json.loads(MODEL_PATH.read_text())
+def load_model() -> dict[str, Any]:
+    return cast(dict[str, Any], json.loads(MODEL_PATH.read_text()))
 
 
-def encode(reading: SensorReading, model: dict) -> tuple[list[float], list[float]]:
+def encode(reading: SensorReading, model: dict[str, Any]) -> tuple[list[float], list[float]]:
     """Standardise the features; missing ones become 0 with a 0 in the mask."""
     values, mask = [], []
     for name, mean, std in zip(FEATURES, model["mean"], model["std"], strict=True):
@@ -54,7 +54,7 @@ def encode(reading: SensorReading, model: dict) -> tuple[list[float], list[float
     return values, mask
 
 
-def _forward(x: list[float], layers: list[dict]) -> list[float]:
+def _forward(x: list[float], layers: list[dict[str, Any]]) -> list[float]:
     for i, layer in enumerate(layers):
         x = [sum(w * v for w, v in zip(row, x, strict=True)) + b for row, b in zip(layer["w"], layer["b"], strict=True)]
         if i < len(layers) - 1:
@@ -62,7 +62,7 @@ def _forward(x: list[float], layers: list[dict]) -> list[float]:
     return x
 
 
-def score(reading: SensorReading, model: Optional[dict] = None) -> Optional[AnomalyResult]:
+def score(reading: SensorReading, model: Optional[dict[str, Any]] = None) -> Optional[AnomalyResult]:
     """Score one reading. Returns None when the car reports too few of the model's sensors."""
     model = model or load_model()
     values, mask = encode(reading, model)

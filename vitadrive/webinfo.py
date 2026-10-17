@@ -7,8 +7,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -17,7 +18,8 @@ WIKI_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/"
 WIKI_API_URL = "https://en.wikipedia.org/w/api.php"
 NHTSA_RECALLS_URL = "https://api.nhtsa.gov/recalls/recallsByVehicle"
 _CACHE_TTL_S = 6 * 3600
-_cache: dict[tuple, tuple[float, object]] = {}
+_cache: dict[tuple[object, ...], tuple[float, object]] = {}
+_T = TypeVar("_T")
 
 
 class WebServiceError(Exception):
@@ -52,16 +54,16 @@ class RecallsOut(BaseModel):
     recalls: list[Recall]
 
 
-def _get_json(url: str, timeout: float = 10):
+def _get_json(url: str, timeout: float = 10) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (fixed https hosts)
         return json.load(resp)
 
 
-def _cached(key: tuple, fn):
+def _cached(key: tuple[object, ...], fn: Callable[[], _T]) -> _T:
     hit = _cache.get(key)
     if hit and time.monotonic() - hit[0] < _CACHE_TTL_S:
-        return hit[1]
+        return cast(_T, hit[1])
     val = fn()
     _cache[key] = (time.monotonic(), val)
     return val
@@ -107,7 +109,7 @@ def _photo_from_search(make: str, model: str) -> Optional[CarPhoto]:
 
 def car_photo(make: str, model: str) -> Optional[CarPhoto]:
     """Photo of the model from its Wikipedia article: exact ``Make Model`` title first, then a search."""
-    def run():
+    def run() -> CarPhoto | None:
         try:
             return _photo_from_summary(f"{make} {model}") or _photo_from_search(make, model)
         except Exception:
@@ -125,7 +127,7 @@ def _date(s: Optional[str]) -> Optional[str]:
 
 def recalls(make: str, model: str, year: int) -> RecallsOut:
     """Safety recalls NHTSA has published for this make, model and year, newest first."""
-    def run():
+    def run() -> RecallsOut:
         q = urllib.parse.urlencode({"make": make, "model": model, "modelYear": year})
         try:
             d = _get_json(f"{NHTSA_RECALLS_URL}?{q}", timeout=12)

@@ -27,7 +27,7 @@ def _c(sev: Severity, text: str) -> str:
     return f"{_COLORS[sev]}{text}{_RESET}" if sys.stdout.isatty() else text
 
 
-def cmd_demo(args) -> None:
+def cmd_demo(args: argparse.Namespace) -> None:
     vd = VitaDrive(Store(args.db))
     for i, vehicle in enumerate(DEMO_VEHICLES):
         count = seed_vehicle(vd, vehicle, owner_id=args.owner, days=args.days, seed=args.seed + i,
@@ -36,14 +36,14 @@ def cmd_demo(args) -> None:
     print("Run `vitadrive serve` to open the dashboard.")
 
 
-def cmd_api_key(args) -> None:
+def cmd_api_key(args: argparse.Namespace) -> None:
     store = Store(args.db)
     if store.get_vehicle(args.vin) is None:
         sys.exit(f"Unknown vehicle {args.vin}")
     print(store.rotate_api_key(args.vin))
 
 
-def cmd_report(args) -> None:
+def cmd_report(args: argparse.Namespace) -> None:
     vd = VitaDrive(Store(args.db))
     r = vd.report(args.vin)
     v = r.vehicle
@@ -67,7 +67,7 @@ def cmd_report(args) -> None:
               f"({m.days_remaining} days, {km})  {m.reason}")
 
 
-def cmd_vapid_keys(args) -> None:
+def cmd_vapid_keys(args: argparse.Namespace) -> None:
     from .push import generate_keys
 
     public, private = generate_keys()
@@ -75,14 +75,14 @@ def cmd_vapid_keys(args) -> None:
     print("Add both to your server environment (e.g. Vercel). Keep the private key secret.", file=sys.stderr)
 
 
-def cmd_serve(args) -> None:
+def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
     os.environ["DATABASE_URL"] = args.db
     uvicorn.run("vitadrive.api:get_app", factory=True, host=args.host, port=args.port)
 
 
-def cmd_obd(args) -> None:
+def cmd_obd(args: argparse.Namespace) -> None:
     from .adapters.obd import OBDAdapter
 
     vd = VitaDrive(Store(args.db))
@@ -93,7 +93,7 @@ def cmd_obd(args) -> None:
         time.sleep(args.interval)
 
 
-def cmd_db_upgrade(args) -> None:
+def cmd_db_upgrade(args: argparse.Namespace) -> None:
     engine = _create_engine(args.db)
     try:
         upgrade_db(engine, args.revision)
@@ -101,7 +101,7 @@ def cmd_db_upgrade(args) -> None:
         engine.dispose()
 
 
-def cmd_db_stamp(args) -> None:
+def cmd_db_stamp(args: argparse.Namespace) -> None:
     engine = _create_engine(args.db)
     try:
         stamp_db(engine, args.revision)
@@ -109,7 +109,7 @@ def cmd_db_stamp(args) -> None:
         engine.dispose()
 
 
-def cmd_db_current(args) -> None:
+def cmd_db_current(args: argparse.Namespace) -> None:
     engine = _create_engine(args.db)
     try:
         print(current_db_revision(engine) or "None")
@@ -117,7 +117,7 @@ def cmd_db_current(args) -> None:
         engine.dispose()
 
 
-def cmd_prune(args) -> None:
+def cmd_prune(args: argparse.Namespace) -> None:
     from .retention import prune
 
     store = Store(args.db)
@@ -132,7 +132,7 @@ def cmd_prune(args) -> None:
         store.close()
 
 
-def main(argv=None) -> None:
+def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="vitadrive", description="Vehicle vitals monitoring & predictive maintenance")
     p.add_argument("--db", default=os.environ.get("DATABASE_URL", "vitadrive.db"),
                    help="SQLite file path or Postgres URL (default: $DATABASE_URL or vitadrive.db)")

@@ -1,0 +1,29 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+        exclude: ^vitadrive/static/(img|media|fonts)/|(^|/)[^/]*\.json$|(^|/)[^/]*\.ics$
+      - id: trailing-whitespace
+        exclude: ^vitadrive/static/(img|media|fonts)/|(^|/)[^/]*\.json$|(^|/)[^/]*\.ics$
+      - id: check-yaml
+        exclude: ^vitadrive/static/(img|media|fonts)/|(^|/)[^/]*\.json$|(^|/)[^/]*\.ics$
+      - id: check-toml
+        exclude: ^vitadrive/static/(img|media|fonts)/|(^|/)[^/]*\.json$|(^|/)[^/]*\.ics$
+      - id: check-merge-conflict
+        exclude: ^vitadrive/static/(img|media|fonts)/|(^|/)[^/]*\.json$|(^|/)[^/]*\.ics$
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
+        pass_filenames: false
+        types: [python]

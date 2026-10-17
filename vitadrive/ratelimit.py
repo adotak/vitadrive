@@ -3,13 +3,15 @@ from __future__ import annotations
 import math
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from .storage import rate_limits_t
+from .storage import Store, rate_limits_t
 
 
 @dataclass(frozen=True)
@@ -20,7 +22,7 @@ class Limit:
 
 
 class RateLimited(Exception):
-    def __init__(self, retry_after: int, message: str = "Too many requests. Please try again later."):
+    def __init__(self, retry_after: int, message: str = "Too many requests. Please try again later.") -> None:
         self.retry_after = max(1, int(retry_after))
         self.message = message
         super().__init__(message)
@@ -47,7 +49,7 @@ def default_limits() -> dict[str, Limit]:
 
 
 class RateLimiter:
-    def __init__(self, store, clock=time.time):
+    def __init__(self, store: Store, clock: Callable[[], float] = time.time) -> None:
         self.store = store
         self.clock = clock
 
@@ -56,6 +58,7 @@ class RateLimiter:
         window_start = int(now // limit.window_s * limit.window_s)
         key = f"{limit.name}:{subject}"
         dialect = self.store.engine.dialect.name
+        insert: Any
         if dialect == "sqlite":
             insert = sqlite_insert
         elif dialect == "postgresql":

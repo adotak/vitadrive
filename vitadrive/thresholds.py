@@ -8,7 +8,7 @@ vehicle by passing a custom rule set to :class:`vitadrive.monitor.HealthMonitor`
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TypedDict
 
 from .models import Powertrain
 
@@ -30,8 +30,23 @@ _ALL = (Powertrain.ICE, Powertrain.HYBRID, Powertrain.EV)
 _COMBUSTION = (Powertrain.ICE, Powertrain.HYBRID)
 _ELECTRIC = (Powertrain.HYBRID, Powertrain.EV)
 
-_TIRE = dict(unit="kPa", warn_low=210, crit_low=180, warn_high=280, crit_high=310,
-             advice="Adjust tire pressure to the value on the door-jamb placard; inspect for punctures.")
+class _TireSettings(TypedDict):
+    unit: str
+    warn_low: float
+    crit_low: float
+    warn_high: float
+    crit_high: float
+    advice: str
+
+
+_TIRE: _TireSettings = {
+    "unit": "kPa",
+    "warn_low": 210,
+    "crit_low": 180,
+    "warn_high": 280,
+    "crit_high": 310,
+    "advice": "Adjust tire pressure to the value on the door-jamb placard; inspect for punctures.",
+}
 
 DEFAULT_RULES: tuple[ThresholdRule, ...] = (
     ThresholdRule("engine_oil_level_pct", "Engine oil level", "%", warn_low=40, crit_low=20,

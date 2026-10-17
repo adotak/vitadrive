@@ -10,7 +10,10 @@ import time
 import traceback
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from typing import Any, cast
 from uuid import uuid4
+
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
@@ -19,13 +22,13 @@ _STANDARD_LOG_RECORD_ATTRIBUTES = set(logging.LogRecord("", 0, "", 0, "", (), No
     "asctime",
     "message",
 }
-_sentry_sdk = None
+_sentry_sdk: Any = None
 
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         request_id = request_id_var.get()
-        payload = {
+        payload: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
@@ -34,7 +37,7 @@ class JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             payload["exc_info"] = "".join(traceback.format_exception(*record.exc_info)).rstrip()
-        extra = {
+        extra: dict[str, Any] = {
             key: value
             for key, value in record.__dict__.items()
             if key not in _STANDARD_LOG_RECORD_ATTRIBUTES and not key.startswith("_")
@@ -43,6 +46,10 @@ class JsonFormatter(logging.Formatter):
             payload["request_id"] = extra["request_id"]
         payload.update({key: value for key, value in extra.items() if key != "request_id"})
         return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+class _JsonStreamHandler(logging.StreamHandler):
+    _vitadrive_json_handler = True
 
 
 def configure_logging() -> None:
@@ -56,11 +63,10 @@ def configure_logging() -> None:
         None,
     )
     if handler is None:
-        handler = logging.StreamHandler(sys.stdout)
-        handler._vitadrive_json_handler = True
+        handler = _JsonStreamHandler(sys.stdout)
         logger.addHandler(handler)
     else:
-        handler.stream = sys.stdout
+        cast(logging.StreamHandler, handler).stream = sys.stdout
     for candidate in list(logger.handlers):
         if candidate is not handler:
             logger.removeHandler(candidate)
@@ -94,11 +100,11 @@ def _valid_request_id(value: str | None) -> bool:
 
 
 class RequestIDMiddleware:
-    def __init__(self, app, sentry_active: bool = False):
+    def __init__(self, app: ASGIApp, sentry_active: bool = False) -> None:
         self.app = app
         self.sentry_active = sentry_active
 
-    async def __call__(self, scope, receive, send) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -120,7 +126,7 @@ class RequestIDMiddleware:
         started = time.perf_counter()
         path = scope.get("path", "")
 
-        async def send_with_request_id(message):
+        async def send_with_request_id(message: Message) -> None:
             nonlocal status
             if message["type"] == "http.response.start":
                 status = message["status"]
