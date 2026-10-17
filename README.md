@@ -78,8 +78,11 @@ Live data from a car with an OBD-II dongle:
 
 ```bash
 pip install -e ".[obd]"
-vitadrive obd <VIN> --odometer 42000   # odometer only needed if the car doesn't report PID 0xA6
+vitadrive bridge <VIN> --url https://vitadrive.example.com
 ```
+
+See [docs/obd-bridge.md](docs/obd-bridge.md) for adapter setup, API-key instructions, simulation and dry-run commands,
+offline buffering, and a Raspberry Pi service example. `vitadrive obd <VIN>` remains available for local-database use.
 
 ## Integrating with a vehicle
 
