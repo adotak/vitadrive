@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.cors import CORSMiddleware
 
 from . import __version__, assistant, costs, nearby, observability, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
@@ -31,6 +32,7 @@ from .models import (
     Vehicle,
 )
 from .ratelimit import Limit, RateLimited, RateLimiter, default_limits
+from .security import SecurityHeadersMiddleware, build_csp
 from .service import HealthReport, UnknownVehicle, VitaDrive
 from .storage import Store, current_db_revision
 
@@ -143,11 +145,25 @@ def _default_db() -> str:
 
 
 def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
-               limits: dict[str, Limit] | None = None) -> FastAPI:
+               limits: dict[str, Limit] | None = None) -> SecurityHeadersMiddleware:
     observability.configure_logging()
     sentry_active = observability.init_sentry()
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
+    cors_origins = [
+        origin.strip()
+        for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+        if origin.strip() and origin.strip() != "*"
+    ]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+            expose_headers=["X-Request-ID", "Retry-After"],
+        )
     app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
     vd = VitaDrive(Store(db or _default_db()))
     auth = auth or ClerkAuth.from_env()
@@ -280,7 +296,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             raise HTTPException(400, "VIN in path and body must match")
         owner = vd.store.vehicle_owner(vin)
         if owner is not None and owner != user:
-            raise HTTPException(409, "This VIN is registered to another account")
+            raise HTTPException(404, "Vehicle not registered")
         return vd.store.upsert_vehicle(vehicle, owner_id=user)
 
     @app.delete("/api/vehicles/{vin}", status_code=204)
@@ -463,13 +479,13 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             raise HTTPException(401, "Invalid cron authorization")
         return retention.prune(vd.store)
 
-    return app
+    return SecurityHeadersMiddleware(app, build_csp(auth.frontend_api))
 
 
-_app: FastAPI | None = None
+_app: SecurityHeadersMiddleware | None = None
 
 
-def get_app() -> FastAPI:
+def get_app() -> SecurityHeadersMiddleware:
     global _app
     if _app is None:
         _app = create_app()
