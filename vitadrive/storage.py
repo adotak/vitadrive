@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     create_engine,
     event,
     insert,
@@ -91,6 +92,22 @@ push_subs_t = Table(
     Column("owner_id", String(255), nullable=False, index=True),
     Column("endpoint", String(2000), nullable=False, unique=True),
     Column("data", Text, nullable=False),
+)
+rate_limits_t = Table(
+    "rate_limits", metadata,
+    Column("key", String(255), primary_key=True),
+    Column("window_start", Integer, primary_key=True),
+    Column("count", Integer, nullable=False),
+)
+readings_daily_t = Table(
+    "readings_daily", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("vin", String(17), ForeignKey("vehicles.vin", ondelete="CASCADE"), nullable=False),
+    Column("day", String(10), nullable=False),
+    Column("odometer_km", Float, nullable=False),
+    Column("count", Integer, nullable=False),
+    Column("data", Text, nullable=False),
+    UniqueConstraint("vin", "day", name="uq_readings_daily_vin_day"),
 )
 
 LOCAL_OWNER = "local"
@@ -241,7 +258,7 @@ class Store:
 
     def delete_vehicle(self, vin: str) -> None:
         with self.transaction() as c:
-            for t in (readings_t, alerts_t, services_t, fuel_logs_t):
+            for t in (readings_t, readings_daily_t, alerts_t, services_t, fuel_logs_t):
                 c.execute(t.delete().where(t.c.vin == vin))
             c.execute(vehicles_t.delete().where(vehicles_t.c.vin == vin))
 
@@ -272,7 +289,27 @@ class Store:
             q = q.limit(limit)
         with self.transaction() as c:
             rows = c.execute(q).all()
-        return [SensorReading.model_validate_json(r[0]) for r in reversed(rows)]
+            readings = [SensorReading.model_validate_json(r[0]) for r in rows]
+            if limit is None or len(rows) < limit:
+                summaries = select(readings_daily_t.c.data, readings_daily_t.c.count).where(
+                    readings_daily_t.c.vin == vin
+                )
+                if since:
+                    summaries = summaries.where(readings_daily_t.c.day >= _iso(since)[:10])
+                summaries = summaries.order_by(readings_daily_t.c.day.desc())
+                if limit is not None and since is None:
+                    summaries = summaries.limit(max(0, limit - len(rows)))
+                for row in c.execute(summaries):
+                    reading = SensorReading.model_validate_json(row._mapping["data"])
+                    reading._sample_count = row._mapping["count"]
+                    readings.append(reading)
+        if since:
+            cutoff = _iso(since)
+            readings = [reading for reading in readings if _iso(reading.timestamp) >= cutoff]
+        readings.sort(key=lambda reading: _iso(reading.timestamp))
+        if limit and len(readings) > limit:
+            readings = readings[-limit:]
+        return readings
 
     def latest_reading(self, vin: str) -> SensorReading | None:
         r = self.readings(vin, limit=1)

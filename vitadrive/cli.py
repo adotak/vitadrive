@@ -117,6 +117,21 @@ def cmd_db_current(args) -> None:
         engine.dispose()
 
 
+def cmd_prune(args) -> None:
+    from .retention import prune
+
+    store = Store(args.db)
+    try:
+        result = prune(store, older_than_days=args.days, dry_run=args.dry_run)
+        print(
+            f"Vehicles: {result.vehicles}; days summarized: {result.days_summarized}; "
+            f"readings removed: {result.readings_removed}; "
+            f"rate-limit rows removed: {result.rate_limit_rows_removed}"
+        )
+    finally:
+        store.close()
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="vitadrive", description="Vehicle vitals monitoring & predictive maintenance")
     p.add_argument("--db", default=os.environ.get("DATABASE_URL", "vitadrive.db"),
@@ -162,6 +177,11 @@ def main(argv=None) -> None:
     db_stamp.set_defaults(fn=cmd_db_stamp)
     db_current = db_sub.add_parser("current", help="Print the current database revision")
     db_current.set_defaults(fn=cmd_db_current)
+
+    prune_parser = sub.add_parser("prune", help="Compact old readings and remove expired rate limits")
+    prune_parser.add_argument("--days", type=int, default=30)
+    prune_parser.add_argument("--dry-run", action="store_true")
+    prune_parser.set_defaults(fn=cmd_prune)
 
     args = p.parse_args(argv)
     args.fn(args)
