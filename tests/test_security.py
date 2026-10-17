@@ -75,6 +75,7 @@ def test_csp_allows_dashboard_resources():
     assert directives["form-action"] == "'self'"
     assert "https://unpkg.com" in directives["script-src"]
     assert "https://challenges.cloudflare.com" in directives["script-src"]
+    assert "'unsafe-inline'" not in directives["script-src"]
     assert "https://unpkg.com" in directives["style-src"]
     assert "https://unpkg.com" in directives["img-src"]
     assert "https://tile.openstreetmap.org" in directives["img-src"]
