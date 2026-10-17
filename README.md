@@ -149,6 +149,12 @@ python -m playwright install chromium
 pytest e2e
 ```
 
+Latest Lighthouse medians (performance / accessibility / best practices / SEO): desktop 100 / 100 / 100 / 100; mobile 92 / 100 / 100 / 100. CI gates accessibility ≥95, best practices ≥95, and performance ≥85:
+
+```bash
+npx @lhci/cli autorun
+```
+
 ### Changing the database schema
 
 Edit the tables in `vitadrive/storage.py`, then generate a migration:
