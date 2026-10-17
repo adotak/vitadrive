@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, assistant, costs, nearby, push, webinfo
+from . import __version__, assistant, costs, nearby, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
 from .calendar import maintenance_calendar
 from .demo import DEMO_VEHICLES, seed_vehicle
@@ -364,6 +364,15 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             return webinfo.recalls(v.make, v.model, v.year)
         except webinfo.WebServiceError as exc:
             raise HTTPException(502, str(exc)) from None
+
+    @app.get("/api/cron/prune", response_model=retention.PruneResult, include_in_schema=False)
+    def cron_prune(authorization: str | None = Header(default=None)):
+        secret = os.environ.get("CRON_SECRET")
+        if not secret:
+            raise HTTPException(503, "Cron is off")
+        if authorization is None or not secrets.compare_digest(authorization, f"Bearer {secret}"):
+            raise HTTPException(401, "Invalid cron authorization")
+        return retention.prune(vd.store)
 
     return app
 
