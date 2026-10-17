@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible problem with VitaDrive.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Before filing, check existing issues and remove any sensitive vehicle or account data.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local SQLite
+        - PostgreSQL
+        - Docker Compose
+        - Vercel
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Redact API keys, VINs, tokens, and personal information.
