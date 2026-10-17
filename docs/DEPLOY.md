@@ -40,6 +40,22 @@ To change the daily Ask quota, open your Vercel project and go to **Settings →
 add `ASK_DAILY_QUOTA` with the number of questions allowed per user each UTC day, then **Redeploy**.
 For local development only, set `VITADRIVE_RATE_LIMITS=0` to turn off all request limits.
 
+### Automatic clean-up of old readings (optional)
+
+VitaDrive keeps recent readings in full. Once readings are more than 30 days old, they are compacted into
+one daily summary, so the database stays smaller while maintenance forecasts and reports can still use
+the history. A scheduled job can do this clean-up for you; without its secret, the job stays off.
+
+1. Generate a secret on your computer with
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"` and copy the result.
+2. In Vercel, open your project and go to **Settings → Environment Variables**. Add `CRON_SECRET` with
+   the generated value, then click **Redeploy**.
+3. To confirm it ran, go to **Vercel → Project → Settings → Cron Jobs** and check the job history.
+
+You can also run the clean-up yourself when needed:
+`DATABASE_URL=... vitadrive prune`. The summaries are included with recent readings, so maintenance
+forecasts are unaffected after old raw rows are compacted.
+
 ## 2. Clerk (login)
 
 1. Go to https://dashboard.clerk.com, click **Create application**, and enable the sign-in methods you want (email, Google, ...).
