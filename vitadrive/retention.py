@@ -3,14 +3,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
+from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import Connection, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from .models import SensorReading
-from .storage import rate_limits_t, readings_daily_t, readings_t, vehicles_t
+from .storage import Store, rate_limits_t, readings_daily_t, readings_t, vehicles_t
 
 _EXCLUDED_FIELDS = {"vin", "timestamp", "odometer_km", "dtc_codes"}
 _RATE_LIMIT_MAX_WINDOW_S = 86400
@@ -104,8 +105,9 @@ def _cutoff(now: datetime, older_than_days: int) -> datetime:
     return datetime.combine(cutoff_day, time.min, tzinfo=timezone.utc)
 
 
-def _upsert_daily(connection, vin: str, day: str, summary: SensorReading, count: int) -> None:
+def _upsert_daily(connection: Connection, vin: str, day: str, summary: SensorReading, count: int) -> None:
     dialect = connection.dialect.name
+    insert_statement: Any
     if dialect == "sqlite":
         insert_statement = sqlite_insert(readings_daily_t)
     elif dialect == "postgresql":
@@ -130,7 +132,7 @@ def _upsert_daily(connection, vin: str, day: str, summary: SensorReading, count:
 
 
 def prune(
-    store,
+    store: Store,
     older_than_days: int = 30,
     now: datetime | None = None,
     dry_run: bool = False,

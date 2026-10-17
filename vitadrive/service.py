@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic import BaseModel
 
@@ -31,7 +31,7 @@ class HealthReport(BaseModel):
 
 class VitaDrive:
     def __init__(self, store: Store, monitor: Optional[HealthMonitor] = None,
-                 planner: Optional[MaintenancePlanner] = None):
+                 planner: Optional[MaintenancePlanner] = None) -> None:
         self.store = store
         self.monitor = monitor or HealthMonitor()
         self.planner = planner or MaintenancePlanner()
@@ -56,7 +56,7 @@ class VitaDrive:
         # Auto-resolve sensor alerts whose condition cleared or changed severity. DTCs stay until acknowledged.
         for open_alert in self.store.alerts(reading.vin, include_acknowledged=False, limit=1000):
             if open_alert.metric != "dtc" and current_severity.get(open_alert.metric) is not open_alert.severity:
-                self.store.acknowledge_alert(open_alert.id)
+                self.store.acknowledge_alert(cast(int, open_alert.id))
         raised = []
         for alert in current:
             dedupe_value = str(alert.value) if alert.metric == "dtc" else None

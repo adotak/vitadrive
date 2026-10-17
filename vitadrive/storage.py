@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 
 from sqlalchemy import (
     Boolean,
@@ -36,6 +37,7 @@ from sqlalchemy import (
     text,
     update,
 )
+from sqlalchemy.engine import Engine
 from sqlalchemy.pool import NullPool
 
 from .models import Alert, FuelLog, SensorReading, ServiceRecord, Vehicle
@@ -124,7 +126,7 @@ def database_url(target: str | Path) -> str:
     return f"sqlite:///{target}"
 
 
-def _create_engine(target: str | Path):
+def _create_engine(target: str | Path) -> Engine:
     url = database_url(target)
     if url.startswith("sqlite"):
         engine = create_engine(url, connect_args={"check_same_thread": False})
@@ -133,7 +135,7 @@ def _create_engine(target: str | Path):
     return create_engine(url, poolclass=NullPool, connect_args={"prepare_threshold": None})
 
 
-def _alembic_config(connection: Connection):
+def _alembic_config(connection: Connection) -> Any:
     from alembic.config import Config
 
     config = Config()
@@ -148,7 +150,7 @@ def _lock_migrations(connection: Connection) -> None:
                            {"lock_id": 0x5649544144524956})
 
 
-def upgrade_db(engine, revision: str = "head") -> None:
+def upgrade_db(engine: Engine, revision: str = "head") -> None:
     """Apply migrations, safely adopting databases created before Alembic was used."""
     from alembic import command
 
@@ -168,7 +170,7 @@ def upgrade_db(engine, revision: str = "head") -> None:
         command.upgrade(config, revision)
 
 
-def stamp_db(engine, revision: str) -> None:
+def stamp_db(engine: Engine, revision: str) -> None:
     from alembic import command
 
     with engine.begin() as connection:
@@ -176,13 +178,15 @@ def stamp_db(engine, revision: str) -> None:
         command.stamp(_alembic_config(connection), revision)
 
 
-def current_db_revision(engine) -> str | None:
+def current_db_revision(engine: Engine) -> str | None:
     from sqlalchemy import inspect
 
     with engine.connect() as connection:
         if "alembic_version" not in inspect(connection).get_table_names():
             return None
-        return connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
+        return cast(str | None, connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one_or_none())
 
 
 def _auto_migrate_enabled() -> bool:
@@ -200,7 +204,7 @@ def _iso(ts: datetime) -> str:
 
 
 class Store:
-    def __init__(self, target: str | Path = "vitadrive.db"):
+    def __init__(self, target: str | Path = "vitadrive.db") -> None:
         self.engine = _create_engine(target)
         try:
             if _auto_migrate_enabled():
@@ -323,7 +327,7 @@ class Store:
                 severity=alert.severity.value, acknowledged=alert.acknowledged,
                 data=alert.model_dump_json(exclude={"id"}),
             ))
-        return alert.model_copy(update={"id": result.inserted_primary_key[0]})
+        return alert.model_copy(update={"id": cast(tuple[Any, ...], result.inserted_primary_key)[0]})
 
     def alerts(self, vin: str, include_acknowledged: bool = True, limit: int = 200) -> list[Alert]:
         q = select(alerts_t.c.id, alerts_t.c.acknowledged, alerts_t.c.data).where(alerts_t.c.vin == vin)
@@ -358,7 +362,7 @@ class Store:
                 vin=record.vin, item=record.item, performed_on=record.performed_on.isoformat(),
                 odometer_km=record.odometer_km, data=record.model_dump_json(exclude={"id"}),
             ))
-        return record.model_copy(update={"id": result.inserted_primary_key[0]})
+        return record.model_copy(update={"id": cast(tuple[Any, ...], result.inserted_primary_key)[0]})
 
     def add_fuel_log(self, log: FuelLog) -> FuelLog:
         with self.transaction() as c:
@@ -366,7 +370,7 @@ class Store:
                 vin=log.vin, filled_on=log.filled_on.isoformat(), odometer_km=log.odometer_km,
                 data=log.model_dump_json(exclude={"id"}),
             ))
-        return log.model_copy(update={"id": result.inserted_primary_key[0]})
+        return log.model_copy(update={"id": cast(tuple[Any, ...], result.inserted_primary_key)[0]})
 
     def fuel_logs(self, vin: str) -> list[FuelLog]:
         q = (select(fuel_logs_t.c.id, fuel_logs_t.c.data).where(fuel_logs_t.c.vin == vin)
@@ -381,13 +385,13 @@ class Store:
             return c.execute(q).rowcount > 0
 
     # push subscriptions (one row per browser/device that turned alerts on)
-    def save_push_subscription(self, owner_id: str, subscription: dict) -> None:
+    def save_push_subscription(self, owner_id: str, subscription: dict[str, Any]) -> None:
         with self.transaction() as c:
             c.execute(push_subs_t.delete().where(push_subs_t.c.endpoint == subscription["endpoint"]))
             c.execute(insert(push_subs_t).values(owner_id=owner_id, endpoint=subscription["endpoint"],
                                                  data=json.dumps(subscription)))
 
-    def push_subscriptions(self, owner_id: str) -> list[dict]:
+    def push_subscriptions(self, owner_id: str) -> list[dict[str, Any]]:
         with self.transaction() as c:
             rows = c.execute(select(push_subs_t.c.data).where(push_subs_t.c.owner_id == owner_id)).all()
         return [json.loads(r[0]) for r in rows]

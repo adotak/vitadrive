@@ -6,6 +6,7 @@ of the vehicle being asked about, which the API has already checked belongs to t
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 from .service import HealthReport
 
@@ -23,7 +24,7 @@ def enabled() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
-def default_llm():
+def default_llm() -> Any:
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(model=os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL, temperature=0.2, timeout=30,
@@ -34,7 +35,7 @@ def context(report: HealthReport) -> str:
     return report.model_dump_json(exclude_none=True)
 
 
-def ask(report: HealthReport, question: str, llm=None) -> str:
+def ask(report: HealthReport, question: str, llm: Any = None) -> str:
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 
@@ -43,4 +44,4 @@ def ask(report: HealthReport, question: str, llm=None) -> str:
         ("human", "Vehicle data (JSON):\n{context}\n\nQuestion: {question}"),
     ])
     chain = prompt | (llm or default_llm()) | StrOutputParser()
-    return chain.invoke({"context": context(report), "question": question}).strip()
+    return cast(str, chain.invoke({"context": context(report), "question": question}).strip())

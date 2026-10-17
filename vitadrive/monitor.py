@@ -10,7 +10,7 @@ _CRITICAL_DTC_PREFIXES = ("P030", "C00", "C01", "B00", "P0A", "P1A")
 class HealthMonitor:
     """Evaluates sensor readings against threshold rules and produces alerts."""
 
-    def __init__(self, rules: tuple[ThresholdRule, ...] = DEFAULT_RULES):
+    def __init__(self, rules: tuple[ThresholdRule, ...] = DEFAULT_RULES) -> None:
         self.rules = rules
 
     def evaluate(self, reading: SensorReading, powertrain: Powertrain) -> list[Alert]:

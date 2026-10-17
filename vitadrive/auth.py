@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass, field
+from typing import cast
 
 import jwt
 
@@ -89,4 +90,4 @@ class ClerkAuth:
         if self.authorized_parties and azp not in {_origin(p) for p in self.authorized_parties}:
             raise AuthError(f"Token issued for an unauthorized origin ({azp or 'none'}); "
                             "add it to CLERK_AUTHORIZED_PARTIES")
-        return claims["sub"]
+        return cast(str, claims["sub"])
