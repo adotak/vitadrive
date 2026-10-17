@@ -385,13 +385,17 @@ button { transition: background .15s, border-color .15s, transform .12s; }
 button:active:not(:disabled) { transform: scale(.97); }
 .sys { transition: border-color .2s, background .2s, box-shadow .2s; }
 .sys:hover { border-color: #cfdccb; background: #fff; box-shadow: 0 6px 16px #173e350d; }
-.view.enter > * { animation: rise .55s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.sr { opacity: 0; transform: translateY(22px) scale(.985); }
+.sr.sr-in { opacity: 1; transform: none; transition: opacity .6s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms), transform .7s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms); }
+.scroll-progress { position: fixed; inset: 0 0 auto; height: 3px; z-index: 30; pointer-events: none; background: linear-gradient(90deg, var(--accent), var(--ok)); transform: scaleX(var(--p, 0)); transform-origin: left; transition: transform .12s linear; }
+body:not(.dashboard) .scroll-progress { display: none; }
+header { transition: box-shadow .3s, background .3s; }
+body.dashboard.scrolled header { box-shadow: 0 10px 30px #173e3514; background: #f5f6f2f7; }
 details.revealing[open] > :not(summary) { animation: reveal .3s ease both; }
 .gauge .fill { animation: gauge-in 1.2s cubic-bezier(.2, .7, .2, 1) .15s both; }
 .bar i { transform-origin: bottom; animation: grow .9s cubic-bezier(.2, .7, .2, 1) both; }
 .hero-photo { animation: drift 24s ease-in-out infinite alternate; }
 .ring.pulse { animation: ring-pulse 2.6s ease-out infinite; }
-@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
 @keyframes reveal { from { opacity: 0; transform: translateY(-4px); } }
 @keyframes gauge-in { from { stroke-dasharray: 0 400; } }
 @keyframes grow { from { transform: scaleY(0); } }
