@@ -48,6 +48,31 @@ vitadrive report VDDEMOICE0000001
 vitadrive serve                # dashboard at http://127.0.0.1:8000, API docs at /docs
 ```
 
+## Run with Docker
+
+Docker Compose starts VitaDrive with a local Postgres database. The Compose database credentials (`vitadrive` / `vitadrive`)
+are for local development only; the database port is not published to the host. Set optional keys in your environment
+before starting the app if you want to enable Clerk, OpenAI, Sentry or the cron endpoint.
+
+```bash
+docker compose up --build
+```
+
+In a second terminal, seed the database with demo vehicles:
+
+```bash
+docker compose run --rm app vitadrive demo
+```
+
+Open http://localhost:8000. When finished, stop the app and remove its local database volume with:
+
+```bash
+docker compose down -v
+```
+
+The Linux/amd64 image is about **106 MB** to download (compressed) and **458 MB** on disk once unpacked; sizes change as
+dependency versions update.
+
 Live data from a car with an OBD-II dongle:
 
 ```bash

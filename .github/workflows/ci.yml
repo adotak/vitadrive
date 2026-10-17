@@ -83,6 +83,33 @@ jobs:
           path: .lighthouseci/
           if-no-files-found: ignore
           include-hidden-files: true
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test Docker Compose
+        run: |
+          set -euo pipefail
+          cleanup() {
+            result=$?
+            if [ "$result" -ne 0 ]; then
+              docker compose logs || true
+            fi
+            docker compose down -v || true
+            exit "$result"
+          }
+          trap cleanup EXIT
+
+          docker compose up -d --build --wait
+          docker compose run --rm app vitadrive demo --days 7
+
+          health="$(curl --fail --silent http://localhost:8000/api/health)"
+          printf '%s\n' "$health"
+          python -c 'import json, sys; data = json.loads(sys.argv[1]); assert data["database"] == "ok"; assert data.get("db_revision")' "$health"
+
+          vehicles="$(curl --fail --silent http://localhost:8000/api/vehicles)"
+          python -c 'import json, sys; data = json.loads(sys.argv[1]); assert isinstance(data, list) and data' "$vehicles"
+          curl --fail --silent --output /dev/null http://localhost:8000/
   badge:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
