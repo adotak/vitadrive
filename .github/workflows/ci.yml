@@ -40,6 +40,30 @@ jobs:
           python-version: "3.12"
       - run: pip install "pip-audit>=2.8"
       - run: pip-audit -r requirements.txt --strict
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[e2e]"
+      - name: Get Playwright version
+        id: playwright-version
+        run: |
+          echo "version=$(python -c 'import importlib.metadata; print(importlib.metadata.version("playwright"))')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest e2e -q --browser chromium --screenshot only-on-failure --tracing retain-on-failure --output e2e-artifacts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-artifacts
+          path: e2e-artifacts/
+          if-no-files-found: ignore
   badge:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
