@@ -19,9 +19,26 @@ You need accounts on all three (each has a free tier). About 15 minutes.
 
 VitaDrive creates and updates database tables automatically with Alembic when it starts. If you already
 have a database from an older VitaDrive version, it is detected and marked as version 0001 automatically;
-there is nothing you need to click or change. To run an upgrade yourself, use
+then it is upgraded to the latest version. There is nothing you need to click or change. To run an upgrade yourself, use
 `DATABASE_URL=... vitadrive db upgrade`. To manage migrations manually instead, set
 `VITADRIVE_AUTO_MIGRATE=0`.
+
+### Abuse protection
+
+Requests are limited per user or vehicle to help prevent accidental or abusive traffic. The counters are
+stored in the database, so limits are shared across Vercel serverless instances.
+
+| Action | Limit |
+|---|---:|
+| Add demo vehicles | 5 per hour per user |
+| Ask VitaDrive | 10 per minute and 50 per UTC day per user |
+| Send vehicle readings | 120 per minute per VIN |
+| Search for nearby shops | 20 per minute per user |
+| Create an API key | 10 per hour per user |
+
+To change the daily Ask quota, open your Vercel project and go to **Settings → Environment Variables**,
+add `ASK_DAILY_QUOTA` with the number of questions allowed per user each UTC day, then **Redeploy**.
+For local development only, set `VITADRIVE_RATE_LIMITS=0` to turn off all request limits.
 
 ## 2. Clerk (login)
 
