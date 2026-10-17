@@ -1,9 +1,10 @@
 """Trip detection and driving-efficiency summaries."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
-from .models import SensorReading, Trip
+from .models import Powertrain, SensorReading, Trip, Vehicle
 from .storage import Store
 
 TRIP_GAP = timedelta(minutes=10)
@@ -95,3 +96,137 @@ def update_trips(store: Store, previous: SensorReading | None, reading: SensorRe
         }))
     else:
         store.add_trip(_trip_from_pair(previous, reading))
+
+
+def _energy_distance(vehicle: Vehicle, trip: Trip) -> tuple[float, float] | None:
+    start, end = trip.start_level_pct, trip.end_level_pct
+    capacity = vehicle.battery_capacity_kwh if vehicle.powertrain is Powertrain.EV else vehicle.tank_capacity_l
+    if (
+        start is None
+        or end is None
+        or capacity is None
+        or capacity <= 0
+        or start <= end
+        or trip.distance_km <= 0
+    ):
+        return None
+    return (start - end) * capacity / 100, trip.distance_km
+
+
+def _consumption(vehicle: Vehicle, trips: list[Trip]) -> float | None:
+    totals = [result for trip in trips if (result := _energy_distance(vehicle, trip)) is not None]
+    if not totals:
+        return None
+    energy = sum(value[0] for value in totals)
+    distance = sum(value[1] for value in totals)
+    return energy / distance * 100
+
+
+def _weekly_summary(vehicle: Vehicle, trips: list[Trip], today: date) -> list[dict[str, Any]]:
+    current_monday = today - timedelta(days=today.weekday())
+    week_starts = [current_monday - timedelta(weeks=offset) for offset in range(7, -1, -1)]
+    result: list[dict[str, Any]] = []
+    for start in week_starts:
+        end = start + timedelta(days=7)
+        week_trips = [
+            trip for trip in trips
+            if start <= _utc(trip.started_at).date() < end
+        ]
+        if not week_trips:
+            result.append({"week_start": start.isoformat(), "distance_km": None, "consumption": None})
+            continue
+        result.append({
+            "week_start": start.isoformat(),
+            "distance_km": round(sum(trip.distance_km for trip in week_trips), 1),
+            "consumption": (
+                None if (value := _consumption(vehicle, week_trips)) is None else round(value, 2)
+            ),
+        })
+    return result
+
+
+def _insights(
+    vehicle: Vehicle,
+    trips: list[Trip],
+    vs_rated_pct: float | None,
+) -> list[dict[str, str]]:
+    insights: list[dict[str, str]] = []
+    if trips and sum(trip.distance_km < 5 for trip in trips) / len(trips) > 0.4:
+        insights.append({
+            "kind": "tip",
+            "text": "Short trips can use more fuel or energy per kilometre; combining errands may help.",
+        })
+    if vs_rated_pct is not None and vs_rated_pct > 10:
+        insights.append({
+            "kind": "tip",
+            "text": f"Recent consumption is {vs_rated_pct:.0f}% above the rated figure; smoother driving may help.",
+        })
+    elif vs_rated_pct is not None and vs_rated_pct < -10:
+        insights.append({
+            "kind": "good",
+            "text": "Your recent consumption is below the vehicle's rated figure.",
+        })
+    if trips and sum(trip.max_speed_kmh > 120 for trip in trips) / len(trips) > 0.2:
+        insights.append({
+            "kind": "tip",
+            "text": "Driving at 100 instead of 120 km/h uses noticeably less fuel or energy.",
+        })
+    if not insights:
+        energy = "energy" if vehicle.powertrain is Powertrain.EV else "fuel"
+        insights.append({
+            "kind": "good",
+            "text": f"Your {energy} use looks steady over the last month.",
+        })
+    return insights[:4]
+
+
+def trip_summary(
+    vehicle: Vehicle,
+    trips: list[Trip],
+    days: int = 30,
+    today: date | None = None,
+) -> dict[str, Any]:
+    today = today or date.today()
+    first_day = today - timedelta(days=days - 1)
+    window = [
+        trip for trip in trips
+        if first_day <= _utc(trip.started_at).date() <= today
+    ]
+    distance = sum(trip.distance_km for trip in window)
+    average = _consumption(vehicle, window)
+    rated = vehicle.rated_consumption
+    vs_rated = (average / rated - 1) * 100 if average is not None and rated and rated > 0 else None
+    return {
+        "trips": len(window),
+        "distance_km": round(distance, 1),
+        "km_per_day": round(distance / days, 1),
+        "avg_consumption": None if average is None else round(average, 2),
+        "rated_consumption": rated,
+        "vs_rated_pct": None if vs_rated is None else round(vs_rated, 1),
+        "unit": "kWh/100 km" if vehicle.powertrain is Powertrain.EV else "L/100 km",
+        "weekly": _weekly_summary(vehicle, trips, today),
+        "insights": _insights(vehicle, window, vs_rated),
+    }
+
+
+def trip_payload(vehicle: Vehicle, trip: Trip) -> dict[str, Any]:
+    energy_distance = _energy_distance(vehicle, trip)
+    consumption = None
+    if energy_distance is not None:
+        consumption = round(energy_distance[0] / energy_distance[1] * 100, 2)
+    return {
+        **trip.model_dump(mode="json"),
+        "start_odometer_km": round(trip.start_odometer_km, 1),
+        "end_odometer_km": round(trip.end_odometer_km, 1),
+        "start_level_pct": (
+            None if trip.start_level_pct is None else round(trip.start_level_pct, 1)
+        ),
+        "end_level_pct": (
+            None if trip.end_level_pct is None else round(trip.end_level_pct, 1)
+        ),
+        "max_speed_kmh": round(trip.max_speed_kmh, 1),
+        "distance_km": round(trip.distance_km, 1),
+        "duration_s": round(trip.duration_s),
+        "avg_speed_kmh": round(trip.avg_speed_kmh, 1),
+        "consumption": consumption,
+    }

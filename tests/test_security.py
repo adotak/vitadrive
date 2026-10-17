@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.responses import Response
 from fastapi.routing import APIRoute
@@ -7,8 +9,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from vitadrive.api import create_app
+from vitadrive.models import Trip
 from vitadrive.security import build_csp
-from vitadrive.storage import alerts_t, fuel_logs_t, readings_daily_t, readings_t, services_t, vehicles_t
+from vitadrive.storage import (
+    alerts_t,
+    fuel_logs_t,
+    readings_daily_t,
+    readings_t,
+    services_t,
+    trips_t,
+    vehicles_t,
+)
 
 VIN = "VDASECURITY000001"
 BOB_VIN = "VDBOBSEC000000001"
@@ -224,6 +235,7 @@ OWNER_ROUTE_CASES = {
     },
     ("DELETE", "/api/vehicles/{vin}/fuel/{log_id}"): {},
     ("GET", "/api/vehicles/{vin}/costs"): {},
+    ("GET", "/api/vehicles/{vin}/trips"): {},
     ("GET", "/api/vehicles/{vin}/maintenance"): {},
     ("GET", "/api/vehicles/{vin}/maintenance/calendar.ics"): {},
     ("GET", "/api/vehicles/{vin}/range"): {},
@@ -250,7 +262,7 @@ def test_vin_route_coverage_guard(client):
 
 
 def _alice_data_snapshot(store):
-    tables = (vehicles_t, readings_t, readings_daily_t, alerts_t, services_t, fuel_logs_t)
+    tables = (vehicles_t, readings_t, readings_daily_t, trips_t, alerts_t, services_t, fuel_logs_t)
     with store.transaction() as connection:
         return {
             table.name: tuple(sorted(
@@ -287,6 +299,17 @@ def test_every_owner_scoped_vin_route_rejects_bob_without_changing_alice_data(cl
     bob_key = client.post(f"/api/vehicles/{BOB_VIN}/api-key", headers=BOB).json()["api_key"]
 
     store = client.app.state.vitadrive.store
+    store.add_trip(Trip(
+        vin=VIN,
+        started_at=datetime(2025, 1, 1, 8, tzinfo=timezone.utc),
+        ended_at=datetime(2025, 1, 1, 8, 30, tzinfo=timezone.utc),
+        start_odometer_km=900,
+        end_odometer_km=910,
+        start_level_pct=60,
+        end_level_pct=58,
+        max_speed_kmh=85,
+        samples=4,
+    ))
     before = _alice_data_snapshot(store)
     for (method, route_path), request_args in OWNER_ROUTE_CASES.items():
         path = route_path.replace("{vin}", VIN).replace("{log_id}", str(fuel_id))
