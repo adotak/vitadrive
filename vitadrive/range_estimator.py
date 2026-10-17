@@ -45,6 +45,7 @@ def estimate_range(vehicle: Vehicle, readings: list[SensorReading]) -> Optional[
         consumption = vehicle.rated_consumption or _DEFAULT_CONSUMPTION[vehicle.powertrain]
         basis = f"rated {unit}/100km (not enough driving data yet)"
 
+    consumption = round(consumption, 2)
     range_km = level / 100 * capacity / consumption * 100
     status = Severity.CRITICAL if range_km < 30 else Severity.WARNING if range_km < 80 else Severity.OK
     return RangeEstimate(

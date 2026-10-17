@@ -78,18 +78,26 @@ def average_daily_km(readings: list[SensorReading]) -> float:
     return km / days
 
 
-def wear_rate_per_km(readings: list[SensorReading], metric: str) -> Optional[float]:
+def wear_rate_per_km(readings: list[SensorReading], metric: str, daily_km: float | None = None) -> Optional[float]:
     """Least-squares slope of ``metric`` vs odometer (units per km). Negative means wearing."""
-    points = [(r.odometer_km, getattr(r, metric)) for r in readings if getattr(r, metric, None) is not None]
+    daily_km = daily_km or average_daily_km(readings)
+    points = []
+    for reading in readings:
+        value = getattr(reading, metric, None)
+        if value is None:
+            continue
+        sample_count = max(1, reading._sample_count)
+        representative_odometer = reading.odometer_km - (sample_count - 1) * daily_km / (2 * sample_count)
+        points.append((representative_odometer, value, sample_count))
     if len(points) < 2:
         return None
-    n = len(points)
-    mean_x = sum(p[0] for p in points) / n
-    mean_y = sum(p[1] for p in points) / n
-    var_x = sum((p[0] - mean_x) ** 2 for p in points)
+    total_weight = sum(point[2] for point in points)
+    mean_x = sum(point[0] * point[2] for point in points) / total_weight
+    mean_y = sum(point[1] * point[2] for point in points) / total_weight
+    var_x = sum(weight * (x - mean_x) ** 2 for x, _y, weight in points)
     if var_x == 0:
         return None
-    slope = sum((p[0] - mean_x) * (p[1] - mean_y) for p in points) / var_x
+    slope = sum(weight * (x - mean_x) * (y - mean_y) for x, y, weight in points) / var_x
     return slope if slope < 0 else None
 
 
@@ -174,7 +182,7 @@ class MaintenancePlanner:
             return None
         if value <= item.wear_limit:
             return today, current_km, f"{item.wear_metric} at limit ({value:g})"
-        rate = wear_rate_per_km(readings_since, item.wear_metric)
+        rate = wear_rate_per_km(readings_since, item.wear_metric, daily_km)
         if rate is None:
             return None
         km_left = (value - item.wear_limit) / -rate

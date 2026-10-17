@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 def utcnow() -> datetime:
@@ -40,6 +40,8 @@ class Vehicle(BaseModel):
 
 class SensorReading(BaseModel):
     """A snapshot of vehicle telemetry. Any field may be missing if the car doesn't report it."""
+
+    _sample_count: int = PrivateAttr(default=1)
 
     vin: str
     timestamp: datetime = Field(default_factory=utcnow)
