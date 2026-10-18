@@ -128,6 +128,8 @@ vitadrive/
   adapters/           simulator, OBD-II
 ```
 
+The dashboard uses plain ES modules in `vitadrive/static/js/`; no build step is required.
+
 ## Development
 
 Install the development tools, enable the repository hooks, then run static checks and tests:

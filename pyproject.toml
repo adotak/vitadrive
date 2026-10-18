@@ -44,7 +44,7 @@ include = ["vitadrive*"]
 
 [tool.setuptools.package-data]
 vitadrive = ["anomaly_model.json", "static/*", "static/img/*", "static/media/*", "static/fonts/*",
-             "migrations/*.mako", "migrations/versions/*.py"]
+             "static/js/*", "migrations/*.mako", "migrations/versions/*.py"]
 
 [tool.ruff]
 line-length = 120
