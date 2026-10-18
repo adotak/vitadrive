@@ -5,7 +5,7 @@ import logging
 import os
 import secrets
 from collections.abc import Callable, Mapping
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
@@ -38,6 +38,7 @@ from .ratelimit import Limit, RateLimited, RateLimiter, default_limits
 from .security import SecurityHeadersMiddleware, build_csp
 from .service import HealthReport, UnknownVehicle, VitaDrive
 from .storage import Store, current_db_revision
+from .trips import trip_payload, trip_summary
 
 _STATIC = Path(__file__).parent / "static"
 _log = logging.getLogger("vitadrive")
@@ -388,6 +389,24 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm: Any = 
     @app.get("/api/vehicles/{vin}/costs", response_model=CostSummary)
     def cost_summary(vin: str = Depends(owned)) -> CostSummary:
         return costs.summarize(cast(Vehicle, vd.store.get_vehicle(vin)), vd.store.fuel_logs(vin))
+
+    @app.get("/api/vehicles/{vin}/trips")
+    def vehicle_trips(
+        vin: str = Depends(owned),
+        days: int = Query(30, ge=1, le=365),
+    ) -> dict[str, Any]:
+        vehicle = cast(Vehicle, vd.store.get_vehicle(vin))
+        today = date.today()
+        first_day = today - timedelta(days=max(days - 1, 55))
+        trips = vd.store.trips(
+            vin,
+            since=datetime.combine(first_day, time.min, tzinfo=timezone.utc),
+        )
+        recent = vd.store.trips(vin, limit=50)
+        return {
+            **trip_summary(vehicle, trips, days=days, today=today),
+            "recent": [trip_payload(vehicle, trip) for trip in recent],
+        }
 
     @app.get("/api/vehicles/{vin}/maintenance", response_model=list[MaintenanceForecast])
     def maintenance(vin: str = Depends(owned)) -> list[MaintenanceForecast]:

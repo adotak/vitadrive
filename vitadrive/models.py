@@ -73,6 +73,33 @@ class SensorReading(BaseModel):
     dtc_codes: list[str] = Field(default_factory=list)
 
 
+class Trip(BaseModel):
+    id: int | None = None
+    vin: str
+    started_at: datetime
+    ended_at: datetime
+    start_odometer_km: float
+    end_odometer_km: float
+    start_level_pct: float | None = None
+    end_level_pct: float | None = None
+    max_speed_kmh: float = Field(ge=0)
+    samples: int = Field(ge=2)
+
+    @property
+    def distance_km(self) -> float:
+        return self.end_odometer_km - self.start_odometer_km
+
+    @property
+    def duration_s(self) -> float:
+        start = self.started_at.replace(tzinfo=timezone.utc) if self.started_at.tzinfo is None else self.started_at
+        end = self.ended_at.replace(tzinfo=timezone.utc) if self.ended_at.tzinfo is None else self.ended_at
+        return max(0.0, (end.astimezone(timezone.utc) - start.astimezone(timezone.utc)).total_seconds())
+
+    @property
+    def avg_speed_kmh(self) -> float:
+        return self.distance_km * 3600 / self.duration_s if self.duration_s else 0.0
+
+
 class Alert(BaseModel):
     id: Optional[int] = None
     vin: str

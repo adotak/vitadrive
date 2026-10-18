@@ -13,6 +13,7 @@ from .models import Alert, MaintenanceForecast, RangeEstimate, SensorReading, Se
 from .monitor import HealthMonitor, overall_status
 from .range_estimator import estimate_range
 from .storage import Store
+from .trips import update_trips
 
 
 class UnknownVehicle(KeyError):
@@ -50,6 +51,8 @@ class VitaDrive:
 
     def _ingest(self, reading: SensorReading) -> list[Alert]:
         vehicle = self._vehicle(reading.vin)
+        previous = self.store.latest_reading(reading.vin)
+        update_trips(self.store, previous, reading)
         self.store.add_reading(reading)
         current = self.monitor.evaluate(reading, vehicle.powertrain)
         current_severity = {a.metric: a.severity for a in current if a.metric != "dtc"}

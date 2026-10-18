@@ -16,6 +16,7 @@ NAVIGATION = [
     ("health", "Health", "Health"),
     ("costs", "Costs", "Costs"),
     ("history", "History", "History"),
+    ("trips", "Trips", "Trip history"),
     ("help", "Nearby help", "Nearby help"),
 ]
 
@@ -120,3 +121,22 @@ def test_maintenance_row_prefills_service(server_url: str, page: Page) -> None:
     prefill.click()
 
     expect(page.locator("#svcItem")).to_have_value(item)
+
+
+def test_trip_summary_insights_and_recent_trips_render(server_url: str, page: Page) -> None:
+    page.goto(f"{server_url}/#trips")
+
+    expect(page.locator("#tripKpis .glance-item")).to_have_count(3)
+    expect(page.locator("#tripKpis .metric-label")).to_have_text([
+        "Distance per day",
+        "Trips in the last 30 days",
+        "Efficiency",
+    ])
+    efficiency = page.locator(
+        "#tripKpis .trip-efficiency-good, #tripKpis .trip-efficiency-warning",
+    )
+    expect(efficiency).to_be_visible()
+    expect(efficiency).not_to_contain_text("+")
+    expect(page.locator("#tripInsights .trip-insight").first).to_be_visible()
+    expect(page.locator("#tripList .trip-row").first).to_be_visible()
+    expect(page.locator("#tripTrend .trip-week")).to_have_count(8)

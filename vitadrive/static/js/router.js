@@ -1,6 +1,7 @@
 import {state} from "./state.js";
 import {armAll, motion, onScroll} from "./motion.js";
 import {$} from "./util.js";
+import {loadTrips} from "./trips.js";
 
 const views = [...document.querySelectorAll(".view")];
 const navLinks = [...document.querySelectorAll(".nav-links a")];
@@ -30,6 +31,7 @@ export function route({focus = false, force = false} = {}) {
   if (target && target !== view) requestAnimationFrame(() => target.scrollIntoView({behavior: motion(), block: "start"}));
   else if (changed || force) window.scrollTo({top: 0, behavior: changed ? "instant" : motion()});
   if (focus && changed) view.querySelector("h1")?.focus({preventScroll: true});
+  if (view.id === "trips" && state.vin) loadTrips(state.vin);
   requestAnimationFrame(onScroll);
 }
 
