@@ -6,7 +6,8 @@ Please report security issues privately instead of opening a public issue. On Gi
 **Security** tab and choose **Report a vulnerability** to submit a private report. The `adotak` repository owner
 must enable private vulnerability reporting in **Settings → Code security** before this option is available.
 
-The only supported version is the latest code on `main`.
+The 1.x release line is supported. Use the latest 1.x release to receive
+security fixes.
 
 ## Security model
 

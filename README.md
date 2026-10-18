@@ -147,6 +147,7 @@ e2e/                   Playwright browser tests
 - [OBD-II bridge guide](docs/obd-bridge.md)
 - [Contributing and development checks](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [VitaDrive 1.0.0 release notes](docs/releases/v1.0.0.md)
 - [Security policy](SECURITY.md)
 
 The API's interactive schema is available at `/docs` when the app is running.
