@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, cast
 
 from .models import MaintenanceForecast, Powertrain, SensorReading, ServiceRecord, Severity
 
@@ -102,7 +102,7 @@ def wear_rate_per_km(readings: list[SensorReading], metric: str, daily_km: float
 
 
 class MaintenancePlanner:
-    def __init__(self, schedule: tuple[MaintenanceItem, ...] = DEFAULT_SCHEDULE):
+    def __init__(self, schedule: tuple[MaintenanceItem, ...] = DEFAULT_SCHEDULE) -> None:
         self.schedule = schedule
 
     def forecast(
@@ -135,9 +135,9 @@ class MaintenancePlanner:
                 candidates.append((_add_months(base_date, item.interval_months), None,
                                    f"every {item.interval_months} months"))
             if item.interval_km:
-                due_km = base_km + item.interval_km
-                km_left = due_km - current_km
-                candidates.append((today + timedelta(days=max(km_left, 0) / daily_km), due_km,
+                interval_due_km = base_km + item.interval_km
+                km_left = interval_due_km - current_km
+                candidates.append((today + timedelta(days=max(km_left, 0) / daily_km), interval_due_km,
                                    f"every {item.interval_km:,.0f} km"))
             wear = self._wear_prediction(item, readings_since, latest, current_km, daily_km, today)
             if wear:
@@ -174,17 +174,25 @@ class MaintenancePlanner:
         return sorted(results, key=lambda f: f.due_date)
 
     @staticmethod
-    def _wear_prediction(item, readings_since, latest, current_km, daily_km, today):
+    def _wear_prediction(
+        item: MaintenanceItem,
+        readings_since: list[SensorReading],
+        latest: SensorReading,
+        current_km: float,
+        daily_km: float,
+        today: date,
+    ) -> tuple[date, float, str] | None:
         if not item.wear_metric:
             return None
         value = getattr(latest, item.wear_metric, None)
         if value is None:
             return None
-        if value <= item.wear_limit:
+        wear_limit = cast(float, item.wear_limit)
+        if value <= wear_limit:
             return today, current_km, f"{item.wear_metric} at limit ({value:g})"
         rate = wear_rate_per_km(readings_since, item.wear_metric, daily_km)
         if rate is None:
             return None
-        km_left = (value - item.wear_limit) / -rate
+        km_left = (value - wear_limit) / -rate
         return (today + timedelta(days=km_left / daily_km), current_km + km_left,
                 f"predicted from sensor wear rate ({item.wear_metric})")

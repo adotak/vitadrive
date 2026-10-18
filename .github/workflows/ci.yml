@@ -24,7 +24,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: ruff check .
-      - run: pytest -q
+      - run: mypy
+      - run: pytest -q --cov --cov-report=term --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
+        with:
+          name: coverage
+          path: coverage.xml
   audit:
     runs-on: ubuntu-latest
     steps:
@@ -34,3 +40,32 @@ jobs:
           python-version: "3.12"
       - run: pip install "pip-audit>=2.8"
       - run: pip-audit -r requirements.txt --strict
+  badge:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+          path: coverage-artifact
+      - name: Generate and publish coverage badge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/coverage_badge.py coverage-artifact/coverage.xml badge/coverage.json
+          mkdir badge-repo
+          cp badge/coverage.json badge-repo/coverage.json
+          cd badge-repo
+          git init --initial-branch=badges
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add coverage.json
+          git commit -m "Update coverage badge"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:badges

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from alembic import context
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import Connection, create_engine, event, pool
 
 from vitadrive.storage import database_url, metadata
 
@@ -29,7 +29,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def _run_migrations_online(connection) -> None:
+def _run_migrations_online(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
