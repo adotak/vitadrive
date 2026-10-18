@@ -37,7 +37,7 @@ from sqlalchemy import (
     text,
     update,
 )
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
 
 from .models import Alert, FuelLog, SensorReading, ServiceRecord, Trip, Vehicle
@@ -146,7 +146,10 @@ def _create_engine(target: str | Path) -> Engine:
         engine = create_engine(url, connect_args={"check_same_thread": False})
         event.listen(engine, "connect", lambda c, _: c.execute("PRAGMA foreign_keys = ON"))
         return engine
-    return create_engine(url, poolclass=NullPool, connect_args={"prepare_threshold": None})
+    connect_args: dict[str, Any] = {"prepare_threshold": None}
+    if "connect_timeout" not in make_url(url).query:
+        connect_args["connect_timeout"] = 5
+    return create_engine(url, poolclass=NullPool, connect_args=connect_args)
 
 
 def _alembic_config(connection: Connection) -> Any:

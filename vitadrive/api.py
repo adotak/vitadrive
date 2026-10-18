@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import threading
+import time as time_module
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -14,11 +16,13 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from psycopg import OperationalError as PsycopgOperationalError
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
-from starlette.types import Scope
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__, assistant, costs, nearby, observability, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
@@ -53,6 +57,17 @@ _ERROR_CODES = {
     502: "upstream_error",
     503: "unavailable",
     500: "internal_error",
+}
+_DATABASE_RETRY_INTERVAL = 15.0
+_DATABASE_FAILURE_HINTS = {
+    "missing_database_url": (
+        "Set DATABASE_URL in Vercel → Settings → Environment Variables, then redeploy."
+    ),
+    "connection_failed": (
+        "Can't reach the database. Check the Supabase project isn't paused and that "
+        "DATABASE_URL (password, host, port) is correct."
+    ),
+    "startup_failed": "Database setup failed. See the Vercel function logs.",
 }
 _T = TypeVar("_T")
 
@@ -93,6 +108,63 @@ def _error_response(
         },
         headers=response_headers,
     )
+
+
+class DatabaseUnavailableMiddleware:
+    def __init__(
+        self,
+        app: ASGIApp,
+        is_connected: Callable[[], bool],
+        connect: Callable[[], None],
+        failure: Callable[[], tuple[str, str]],
+    ) -> None:
+        self.app = app
+        self.is_connected = is_connected
+        self.connect = connect
+        self.failure = failure
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if not self.is_connected():
+            self.connect()
+        if self.is_connected():
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if path == "/api/config":
+            await self.app(scope, receive, send)
+            return
+        if not path.startswith("/api/"):
+            await self.app(scope, receive, send)
+            return
+
+        reason, hint = self.failure()
+        request = Request(scope, receive=receive)
+        if scope.get("method") == "GET" and path == "/api/health":
+            response: Response = JSONResponse(
+                status_code=503,
+                content={
+                    "ok": False,
+                    "version": __version__,
+                    "database": "unavailable",
+                    "reason": reason,
+                    "hint": hint,
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+        else:
+            response = _error_response(
+                request,
+                503,
+                "Database unavailable",
+                "Database unavailable. Try again in a minute.",
+            )
+        await response(scope, receive, send)
+
 
 # Logging one of these services resolves open alerts whose metric starts with the prefix.
 _SERVICE_RESOLVES = {
@@ -153,8 +225,12 @@ def _default_db() -> str:
     if url:
         return url
     if os.environ.get("VERCEL"):
-        raise RuntimeError("DATABASE_URL must be set on Vercel (e.g. your Supabase Postgres connection string)")
+        raise _MissingDatabaseURL
     return "vitadrive.db"
+
+
+class _MissingDatabaseURL(RuntimeError):
+    pass
 
 
 def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm: Any = None,
@@ -164,6 +240,66 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm: Any = 
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
     auth = auth or ClerkAuth.from_env()
+    app_limits = default_limits()
+    if limits is not None:
+        app_limits.update(limits)
+    rate_limits_enabled = os.environ.get("VITADRIVE_RATE_LIMITS", "1").strip().lower() not in {"0", "false"}
+    vd = cast(VitaDrive, None)
+    rate_limiter: RateLimiter | None = None
+    database_connected = False
+    failure_reason = "startup_failed"
+    last_attempt: float | None = None
+    connect_lock = threading.Lock()
+
+    def connect(*, retry: bool = False) -> None:
+        nonlocal vd, rate_limiter, database_connected, failure_reason, last_attempt
+        with connect_lock:
+            if database_connected:
+                return
+            attempted_at = time_module.monotonic()
+            if retry and last_attempt is not None and attempted_at - last_attempt < _DATABASE_RETRY_INTERVAL:
+                return
+            last_attempt = attempted_at
+            store: Store | None = None
+            try:
+                db_target = db if db is not None else _default_db()
+                store = Store(db_target)
+                connected_vd = VitaDrive(store)
+                connected_rate_limiter = RateLimiter(store) if rate_limits_enabled else None
+            except Exception as exc:
+                if store is not None:
+                    store.close()
+                if isinstance(exc, _MissingDatabaseURL):
+                    failure_reason = "missing_database_url"
+                elif isinstance(exc, (OperationalError, InterfaceError, PsycopgOperationalError)):
+                    failure_reason = "connection_failed"
+                else:
+                    failure_reason = "startup_failed"
+                _log.exception("Database startup failed")
+                return
+
+            vd = connected_vd
+            rate_limiter = connected_rate_limiter
+            database_connected = True
+            failure_reason = "startup_failed"
+            app.state.vitadrive = vd
+            app.state.rate_limiter = rate_limiter
+
+    def connected() -> bool:
+        return database_connected
+
+    def database_failure() -> tuple[str, str]:
+        return failure_reason, _DATABASE_FAILURE_HINTS[failure_reason]
+
+    # Keep these inner to request ID and security middleware so their response
+    # wrappers also run when database-unavailable responses short-circuit routing.
+    app.add_middleware(
+        DatabaseUnavailableMiddleware,
+        is_connected=connected,
+        connect=lambda: connect(retry=True),
+        failure=database_failure,
+    )
+    connect()
     cors_origins = [
         origin.strip()
         for origin in os.environ.get("CORS_ORIGINS", "").split(",")
@@ -180,13 +316,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm: Any = 
         )
     app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
     app.add_middleware(SecurityHeadersMiddleware, csp=build_csp(auth.frontend_api))
-    vd = VitaDrive(Store(db or _default_db()))
-    app_limits = default_limits()
-    if limits is not None:
-        app_limits.update(limits)
-    rate_limiter = (None if os.environ.get("VITADRIVE_RATE_LIMITS", "1").strip().lower() in {"0", "false"}
-                    else RateLimiter(vd.store))
-    app.state.vitadrive = vd
+    app.state.vitadrive = vd if database_connected else None
     app.state.rate_limiter = rate_limiter
 
     @app.exception_handler(StarletteHTTPException)

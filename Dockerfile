@@ -9,7 +9,7 @@ COPY requirements.txt pyproject.toml README.md LICENSE ./
 COPY vitadrive ./vitadrive
 
 RUN python -m pip wheel --wheel-dir=/wheels -r requirements.txt . \
-    && python -m pip install --prefix=/install --no-cache-dir --no-index --find-links=/wheels vitadrive==1.0.0
+    && python -m pip install --prefix=/install --no-cache-dir --no-index --find-links=/wheels vitadrive==1.0.1
 
 FROM python:3.12-slim AS runtime
 

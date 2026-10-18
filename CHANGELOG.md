@@ -6,6 +6,12 @@ All notable changes to VitaDrive are documented here. This project follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-18
+
+### Fixed
+
+- Fixed: the app no longer crashes on every page when the database is missing or unreachable; /api/health reports the reason.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added
@@ -39,5 +45,6 @@ All notable changes to VitaDrive are documented here. This project follows
 Pre-roadmap baseline: vehicle monitoring, threshold alerts, maintenance
 forecasts, range estimates, the REST API, dashboard, and SQLite storage.
 
-[Unreleased]: https://github.com/adotak/vitadrive/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/adotak/vitadrive/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/adotak/vitadrive/releases/tag/v1.0.1
 [1.0.0]: https://github.com/adotak/vitadrive/releases/tag/v1.0.0
