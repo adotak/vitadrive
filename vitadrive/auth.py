@@ -75,8 +75,14 @@ class ClerkAuth:
         token = authorization[7:].strip()
         try:
             key = self._jwks_client().get_signing_key_from_jwt(token)
-            claims = jwt.decode(token, key.key, algorithms=["RS256"], options={"require": ["exp", "sub"]},
-                                leeway=10)
+            claims = jwt.decode(
+                token,
+                key.key,
+                algorithms=["RS256"],
+                issuer=f"https://{self.frontend_api}",
+                options={"require": ["exp", "sub", "iss"]},
+                leeway=10,
+            )
         except jwt.PyJWTError as exc:
             raise AuthError("Invalid or expired session") from exc
         azp = _origin(claims.get("azp") or "")
