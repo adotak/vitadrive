@@ -6,6 +6,7 @@
 <title>VitaDrive</title>
 <meta name="description" content="Car vitals monitoring, warnings and predicted maintenance dates.">
 <meta name="theme-color" content="#173e35">
+<link rel="preconnect" href="https://thumb.wikimedia.org" crossorigin>
 <link rel="icon" type="image/png" href="/static/icon-192.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -141,7 +142,10 @@
       </div>
     </div>
     <div class="hero-updated" id="updatedStamp"></div>
-    <div class="hero-photo" id="heroPhoto" aria-hidden="true"></div>
+    <div class="hero-photo" id="heroPhoto" aria-hidden="true">
+      <img class="hero-photo-image" id="heroImage" alt="" width="960" height="540" crossorigin="anonymous"
+           src="/static/img/cockpit.jpg">
+    </div>
     <a class="photo-credit" id="photoCredit" target="_blank" rel="noopener" hidden>Photo: Wikipedia</a>
   </section>
   <section class="card range-card span-4" aria-labelledby="rangeTitle">
