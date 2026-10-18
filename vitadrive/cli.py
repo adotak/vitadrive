@@ -2,12 +2,25 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
-import time
+from datetime import datetime, timezone
 
+from .bridge import (
+    ApiSink,
+    Bridge,
+    DryRunSink,
+    FatalBridgeError,
+    OfflineBuffer,
+    ReadingSink,
+    ReadingSource,
+    SendResult,
+    SendStatus,
+    SimulatedSource,
+)
 from .demo import DEMO_VEHICLES, seed_vehicle
-from .models import Severity
+from .models import Powertrain, SensorReading, Severity, Vehicle
 from .service import VitaDrive
 from .storage import (
     LOCAL_OWNER,
@@ -82,15 +95,96 @@ def cmd_serve(args: argparse.Namespace) -> None:
     uvicorn.run("vitadrive.api:get_app", factory=True, host=args.host, port=args.port)
 
 
-def cmd_obd(args: argparse.Namespace) -> None:
-    from .adapters.obd import OBDAdapter
+class _LocalSink:
+    def __init__(self, vd: VitaDrive) -> None:
+        self.vd = vd
 
-    vd = VitaDrive(Store(args.db))
-    adapter = OBDAdapter(args.vin, port=args.port, fallback_odometer_km=args.odometer)
-    while True:
-        for alert in vd.ingest(adapter.read()):
-            print(f"[{alert.severity.value.upper()}] {alert.message}")
-        time.sleep(args.interval)
+    def send(self, reading: SensorReading) -> SendResult:
+        alerts = [alert.model_dump(mode="json") for alert in self.vd.ingest(reading)]
+        return SendResult(SendStatus.SENT, alerts=alerts)
+
+
+def _simulation_vehicle(vin: str, local_vehicle: Vehicle | None = None) -> Vehicle:
+    if local_vehicle is not None:
+        return local_vehicle
+    for vehicle in DEMO_VEHICLES:
+        if vehicle.vin == vin:
+            return vehicle
+    return Vehicle(
+        vin=vin,
+        make="Simulator",
+        model="Vehicle",
+        year=datetime.now(timezone.utc).year,
+        powertrain=Powertrain.ICE,
+        tank_capacity_l=50,
+        rated_consumption=7.5,
+    )
+
+
+def cmd_bridge(args: argparse.Namespace) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    store: Store | None = None
+    buffer = OfflineBuffer(":memory:" if args.dry_run else args.buffer)
+    vehicle: Vehicle | None = None
+    sink: ReadingSink
+    try:
+        if args.local:
+            store = Store(args.db)
+            vd = VitaDrive(store)
+            vehicle = store.get_vehicle(args.vin)
+            if vehicle is None:
+                raise SystemExit(f"Unknown vehicle {args.vin}")
+            sink = _LocalSink(vd)
+        elif args.dry_run:
+            sink = DryRunSink()
+        else:
+            sink = ApiSink(args.url, args.vin, args.api_key)
+
+        source: ReadingSource
+        if args.simulate:
+            source = SimulatedSource(
+                _simulation_vehicle(args.vin, vehicle),
+                interval_s=args.interval,
+            )
+        else:
+            from .adapters.obd import OBDAdapter
+
+            source = OBDAdapter(
+                args.vin,
+                port=args.port,
+                fallback_odometer_km=args.odometer,
+                baudrate=args.baudrate,
+                timeout=args.timeout,
+                fast=args.fast,
+            )
+        bridge = Bridge(source, sink, buffer, interval_s=args.interval)
+        bridge.run(max_ticks=args.count)
+    except FatalBridgeError as exc:
+        raise SystemExit(str(exc)) from exc
+    finally:
+        buffer.close()
+        if store is not None:
+            store.close()
+
+
+def cmd_obd(args: argparse.Namespace) -> None:
+    cmd_bridge(argparse.Namespace(
+        vin=args.vin,
+        url=None,
+        api_key=None,
+        port=args.port,
+        baudrate=args.baudrate,
+        timeout=args.timeout,
+        fast=args.fast,
+        interval=args.interval,
+        simulate=False,
+        dry_run=False,
+        buffer=None,
+        count=None,
+        local=True,
+        odometer=args.odometer,
+        db=args.db,
+    ))
 
 
 def cmd_db_upgrade(args: argparse.Namespace) -> None:
@@ -164,8 +258,28 @@ def main(argv: list[str] | None = None) -> None:
     o.add_argument("vin")
     o.add_argument("--port", default=None, help="Serial port, auto-detected if omitted")
     o.add_argument("--odometer", type=float, default=None, help="Odometer if the car doesn't report it")
+    o.add_argument("--baudrate", type=int, default=None)
+    o.add_argument("--timeout", type=float, default=5)
+    o.add_argument("--fast", action="store_true")
     o.add_argument("--interval", type=float, default=30)
     o.set_defaults(fn=cmd_obd)
+
+    b = sub.add_parser("bridge", help="Stream readings to a VitaDrive server")
+    b.add_argument("vin")
+    b.add_argument("--url")
+    b.add_argument("--api-key", default=os.environ.get("VITADRIVE_API_KEY"))
+    b.add_argument("--port", default=None, help="Serial port, auto-detected if omitted")
+    b.add_argument("--odometer", type=float, default=None, help="Fallback odometer when OBD-II does not report it")
+    b.add_argument("--baudrate", type=int, default=None)
+    b.add_argument("--timeout", type=float, default=5)
+    b.add_argument("--fast", action="store_true")
+    b.add_argument("--interval", type=float, default=5)
+    b.add_argument("--simulate", action="store_true", help="Generate realistic live-style readings without hardware")
+    b.add_argument("--dry-run", action="store_true", help="Print reading JSON lines without sending them")
+    b.add_argument("--buffer", default=None, help="Offline buffer SQLite path")
+    b.add_argument("--count", type=int, default=None, help="Stop after this many readings")
+    b.add_argument("--local", action="store_true", help="Ingest readings into the local --db")
+    b.set_defaults(fn=cmd_bridge)
 
     db = sub.add_parser("db", help="Manage database migrations")
     db_sub = db.add_subparsers(dest="db_cmd", required=True)
@@ -184,6 +298,22 @@ def main(argv: list[str] | None = None) -> None:
     prune_parser.set_defaults(fn=cmd_prune)
 
     args = p.parse_args(argv)
+    if args.cmd == "bridge":
+        if args.local and args.dry_run:
+            p.error("--local and --dry-run cannot be used together")
+        if not args.local and not args.dry_run:
+            if not args.url:
+                p.error("--url is required unless --dry-run or --local is specified")
+            if not args.api_key:
+                p.error("provide --api-key or set VITADRIVE_API_KEY")
+        if args.count is not None and args.count < 0:
+            p.error("--count must be non-negative")
+        if args.interval <= 0:
+            p.error("--interval must be positive")
+        if args.timeout <= 0:
+            p.error("--timeout must be positive")
+        if args.baudrate is not None and args.baudrate <= 0:
+            p.error("--baudrate must be positive")
     args.fn(args)
 
 

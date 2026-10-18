@@ -8,14 +8,20 @@ from the vehicle's own telematics/CAN gateway.
 """
 from __future__ import annotations
 
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from ..models import SensorReading
 
 
 class OBDAdapter:
     def __init__(
-        self, vin: str, port: Optional[str] = None, fallback_odometer_km: Optional[float] = None,
+        self,
+        vin: str,
+        port: Optional[str] = None,
+        fallback_odometer_km: Optional[float] = None,
+        baudrate: int | None = None,
+        timeout: float = 5.0,
+        fast: bool = False,
     ) -> None:
         try:
             import obd  # type: ignore[import-not-found]
@@ -24,11 +30,38 @@ class OBDAdapter:
         self._obd = obd
         self.vin = vin
         self.fallback_odometer_km = fallback_odometer_km
-        self.connection = obd.OBD(port)
-        if not self.connection.is_connected():
-            raise RuntimeError("Could not connect to an OBD-II adapter")
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+        self.fast = fast
+        self.connection: Any | None = None
+        try:
+            self.reconnect()
+        except Exception:
+            self.connection = None
+
+    def is_connected(self) -> bool:
+        return self.connection is not None and self.connection.is_connected()
+
+    def reconnect(self) -> bool:
+        if self.connection is not None:
+            close = getattr(self.connection, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+        self.connection = self._obd.OBD(
+            self.port,
+            baudrate=self.baudrate,
+            timeout=self.timeout,
+            fast=self.fast,
+        )
+        return self.is_connected()
 
     def _query(self, name: str) -> float | list[tuple[str, str]] | None:
+        if self.connection is None:
+            raise RuntimeError("OBD-II adapter is disconnected")
         cmd = getattr(self._obd.commands, name, None)
         if cmd is None or not self.connection.supports(cmd):
             return None
@@ -39,6 +72,8 @@ class OBDAdapter:
         return float(value.magnitude) if hasattr(value, "magnitude") else cast(float | list[tuple[str, str]], value)
 
     def read(self) -> SensorReading:
+        if not self.is_connected():
+            raise RuntimeError("OBD-II adapter is disconnected")
         odometer = cast(float | None, self._query("ODOMETER")) or self.fallback_odometer_km
         if odometer is None:
             raise RuntimeError("Vehicle does not report odometer over OBD-II; pass fallback_odometer_km")
