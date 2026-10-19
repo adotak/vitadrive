@@ -9,3 +9,5 @@ build/
 dist/
 .env
 .vercel/
+e2e-artifacts/
+.lighthouseci/

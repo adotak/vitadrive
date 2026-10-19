@@ -3,23 +3,39 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Iterator, Optional
+from typing import Iterator, Optional, TypedDict, cast
 
 from ..models import Powertrain, SensorReading, Vehicle
+
+
+class _SimulatorState(TypedDict):
+    engine_oil_level_pct: float | None
+    engine_oil_life_pct: float | None
+    coolant_level_pct: float
+    brake_fluid_level_pct: float
+    brake_pad_front_mm: float
+    brake_pad_rear_mm: float
+    washer_fluid_level_pct: float
+    tire_tread_mm: float
+    tires: list[float]
+    battery_12v_voltage: float
+    fuel_level_pct: float | None
+    hv_battery_soc_pct: float | None
+    hv_battery_soh_pct: float | None
 
 
 class VehicleSimulator:
     """Simulates daily driving with gradual wear, fuel/charge use and occasional faults."""
 
     def __init__(self, vehicle: Vehicle, start_odometer_km: float = 25_000, seed: Optional[int] = None,
-                 daily_km: float = 45, fault_rate: float = 0.02):
+                 daily_km: float = 45, fault_rate: float = 0.02) -> None:
         self.vehicle = vehicle
         self.rng = random.Random(seed)
         self.daily_km = daily_km
         self.fault_rate = fault_rate
         self.odometer = start_odometer_km
         ev = vehicle.powertrain is Powertrain.EV
-        self.state = {
+        self.state: _SimulatorState = {
             "engine_oil_level_pct": None if ev else 95.0,
             "engine_oil_life_pct": None if ev else 70.0,
             "coolant_level_pct": 95.0,
@@ -40,7 +56,7 @@ class VehicleSimulator:
         self.odometer += km
         if s["engine_oil_level_pct"] is not None:
             s["engine_oil_level_pct"] = max(0, s["engine_oil_level_pct"] - km * 0.004)
-            s["engine_oil_life_pct"] = max(0, s["engine_oil_life_pct"] - km * 0.01)
+            s["engine_oil_life_pct"] = max(0, cast(float, s["engine_oil_life_pct"]) - km * 0.01)
         s["coolant_level_pct"] = max(0, s["coolant_level_pct"] - km * 0.0005)
         s["brake_fluid_level_pct"] = max(0, s["brake_fluid_level_pct"] - km * 0.0003)
         s["brake_pad_front_mm"] = max(0, s["brake_pad_front_mm"] - km * 0.00012)
@@ -63,7 +79,12 @@ class VehicleSimulator:
             if s["hv_battery_soc_pct"] < 25 and r.random() < 0.85:
                 s["hv_battery_soc_pct"] = r.uniform(80, 90)
             s["hv_battery_soc_pct"] = max(0, s["hv_battery_soc_pct"])
-            s["hv_battery_soh_pct"] = max(0, s["hv_battery_soh_pct"] - km * 0.00004)
+            s["hv_battery_soh_pct"] = max(0, cast(float, s["hv_battery_soh_pct"]) - km * 0.00004)
+
+    def advance(self, distance_km: float) -> None:
+        if distance_km < 0:
+            raise ValueError("distance_km must be non-negative")
+        self._drive(distance_km)
 
     def reading(self, timestamp: datetime) -> SensorReading:
         s, r = self.state, self.rng
@@ -73,7 +94,9 @@ class VehicleSimulator:
             dtcs.append(r.choice(["P0420", "P0171", "P0300", "P0128", "C0035", "U0100"] if ice
                                  else ["P0A80", "U0100", "C0035", "B1000"]))
         fl, fr, rl, rr = (round(p + r.uniform(-2, 2), 1) for p in s["tires"])
-        rnd = lambda v, d=1: None if v is None else round(v, d)  # noqa: E731
+        def rnd(value: float | None, digits: int = 1) -> float | None:
+            return None if value is None else round(value, digits)
+
         return SensorReading(
             vin=self.vehicle.vin,
             timestamp=timestamp,

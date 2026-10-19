@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 
 from alembic import context
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import Connection, create_engine, event, pool
+from sqlalchemy.engine import make_url
 
 from vitadrive.storage import database_url, metadata
 
@@ -29,7 +30,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def _run_migrations_online(connection) -> None:
+def _run_migrations_online(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -46,7 +47,11 @@ def run_migrations_online() -> None:
         return
 
     url = database_url(_database_target())
-    connect_args = {"prepare_threshold": None} if url.startswith("postgresql") else {}
+    connect_args: dict[str, object] = {}
+    if url.startswith("postgresql"):
+        connect_args["prepare_threshold"] = None
+        if "connect_timeout" not in make_url(url).query:
+            connect_args["connect_timeout"] = 5
     engine = create_engine(url, poolclass=pool.NullPool, connect_args=connect_args)
     if url.startswith("sqlite"):
         event.listen(engine, "connect", lambda connection, _: connection.execute("PRAGMA foreign_keys = ON"))

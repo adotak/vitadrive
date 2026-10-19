@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 
@@ -164,6 +165,17 @@ def test_dashboard_typography_assets(tmp_path):
         assert response.status_code == 200 and response.content.startswith(b"wOF2")
 
 
+def test_dashboard_uses_external_module_without_inline_handlers(tmp_path):
+    client = TestClient(create_app(str(tmp_path / "modules.db")))
+    html = client.get("/").text
+    assert not re.search(r"<script(?![^>]*\bsrc\s*=)[^>]*>", html, re.I)
+    assert not re.search(r"\son[a-z]+\s*=", html, re.I)
+    for path in ("main.js", "trips.js"):
+        module = client.get(f"/static/js/{path}")
+        assert module.status_code == 200
+        assert "javascript" in module.headers["content-type"]
+
+
 def test_dashboard_navigation_has_unique_targets(tmp_path):
     class DashboardParser(HTMLParser):
         def __init__(self):
@@ -210,4 +222,4 @@ def test_dashboard_sidebar_links_open_views(tmp_path):
     parser = ViewParser()
     parser.feed(client.get("/").text)
     assert parser.nav_targets == parser.views
-    assert parser.views == ["overview", "maintenance", "health", "costs", "history", "help"]
+    assert parser.views == ["overview", "maintenance", "health", "costs", "history", "trips", "help"]

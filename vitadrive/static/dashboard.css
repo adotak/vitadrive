@@ -16,7 +16,7 @@
   --bg: #f5f6f2;
   --card: #fff;
   --fg: #233d35;
-  --mute: #697770;
+  --mute: #616f68;
   --line: #e3e8e1;
   --forest: #173e35;
   --accent: #d6edab;
@@ -123,6 +123,7 @@ button.chip:hover { background: #e9efdf; border-color: #becdb9; }
 .hero-card .chip { color: #e0eadd; border-color: #ffffff24; background: #173e35c0; font-size: 10px; }
 .hero-updated { font-size: 10px; color: #c4d6c9; }
 .hero-photo { position: absolute; inset: 0 0 0 auto; width: 58%; background: center/cover no-repeat url('/static/img/cockpit.jpg'); opacity: .3; mask-image: linear-gradient(90deg, transparent, #000); -webkit-mask-image: linear-gradient(90deg, transparent, #000); transition: opacity .4s; }
+.hero-photo-image { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hero-photo.on { opacity: .38; }
 .hero-photo::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, #173e35b0, #173e3520); }
 .hero-card .photo-credit { position: absolute; right: 12px; bottom: 8px; color: #d7e3dc; font-size: 10px; text-decoration: none; }
@@ -216,6 +217,20 @@ details.logsvc { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(
 .bar i { width: 100%; max-width: 48px; min-height: 3px; border-radius: 5px 5px 1px 1px; background: #cbdcbd; }
 .bar.now i { background: var(--forest); }
 .bar.now { color: var(--fg); }
+.trip-insight { margin: 9px 0; padding: 12px 14px; border-left: 3px solid var(--info); border-radius: 7px; background: #f3f6ef; font-size: 12px; line-height: 1.55; }
+.trip-insight.good { border-color: var(--ok); }
+.trip-insight.tip { border-color: var(--warning); }
+.trip-efficiency-good { color: var(--ok); }
+.trip-efficiency-warning { color: var(--warning); }
+.trip-trend { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); align-items: end; gap: 7px; height: 160px; padding: 8px 0 0; border-bottom: 1px solid var(--line); }
+.trip-week { height: 100%; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; color: var(--mute); font-size: 9px; }
+.trip-week i { display: block; width: min(70%, 36px); height: var(--bar-height); min-height: 3px; border-radius: 5px 5px 1px 1px; background: #cbdcbd; }
+.trip-week.has-data i { background: var(--forest); }
+.trip-week-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trip-week-label { white-space: nowrap; }
+.trip-trend-legend { display: flex; justify-content: space-between; margin-top: 7px; color: var(--mute); font-size: 10px; }
+.trip-empty { margin: 4px 0; line-height: 1.6; }
+.trip-row .trip-consumption { white-space: nowrap; font-size: 11px; }
 #answer { margin-top: 14px; line-height: 1.7; }
 .near-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px; }
 .near-top .chips { margin: 0; }
@@ -361,6 +376,11 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
   .gallery { grid-template-columns: 1fr 1fr; gap: 12px; }
 }
 @media (max-width: 420px) {
+  .trip-trend { gap: 3px; }
+  .trip-week { font-size: 8px; gap: 4px; }
+  .trip-week-label { font-size: 7px; }
+  .trip-row { align-items: flex-start; gap: 7px; }
+  .trip-row .trip-consumption { font-size: 10px; }
   .card .car { font-size: 25px; }
   .hero-card { padding: 21px; }
   .reading-label { display: none; }
@@ -401,6 +421,9 @@ details.revealing[open] > :not(summary) { animation: reveal .3s ease both; }
 @keyframes grow { from { transform: scaleY(0); } }
 @keyframes drift { to { transform: scale(1.07) translateX(-1.5%); } }
 @keyframes ring-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 10px transparent; } }
+@media (max-width: 900px) {
+  .range-caption { font-size: 12px; }
+}
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }

@@ -71,6 +71,20 @@ To send errors to Sentry:
 `SENTRY_TRACES_SAMPLE_RATE` optionally controls performance tracing and defaults to `0` (off).
 Set `LOG_LEVEL` to change application log verbosity; it defaults to `INFO`.
 
+### Database startup troubleshooting
+
+The app can still serve the dashboard and configuration if its database is unavailable.
+Check `GET /api/health` for one of these public reason codes:
+
+- `missing_database_url` — add `DATABASE_URL` under **Vercel → Settings → Environment Variables**
+  and redeploy.
+- `connection_failed` — check that the Supabase project is active and that the database URL's
+  password, host, and port are correct.
+- `startup_failed` — database setup or migrations failed; inspect the Vercel function logs for
+  the underlying error.
+
+API routes that require the database return 503 until a later request reconnects successfully.
+
 ## 2. Clerk (login)
 
 1. Go to https://dashboard.clerk.com, click **Create application**, and enable the sign-in methods you want (email, Google, ...).

@@ -4,18 +4,25 @@ from __future__ import annotations
 import logging
 import os
 import secrets
-from datetime import date
+import threading
+import time as time_module
+from collections.abc import Callable, Mapping
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from typing import Any, TypeVar, cast
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from psycopg import OperationalError as PsycopgOperationalError
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import InterfaceError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__, assistant, costs, nearby, observability, push, retention, webinfo
 from .auth import AuthError, ClerkAuth
@@ -35,6 +42,7 @@ from .ratelimit import Limit, RateLimited, RateLimiter, default_limits
 from .security import SecurityHeadersMiddleware, build_csp
 from .service import HealthReport, UnknownVehicle, VitaDrive
 from .storage import Store, current_db_revision
+from .trips import trip_payload, trip_summary
 
 _STATIC = Path(__file__).parent / "static"
 _log = logging.getLogger("vitadrive")
@@ -50,6 +58,26 @@ _ERROR_CODES = {
     503: "unavailable",
     500: "internal_error",
 }
+_DATABASE_RETRY_INTERVAL = 15.0
+_DATABASE_FAILURE_HINTS = {
+    "missing_database_url": (
+        "Set DATABASE_URL in Vercel → Settings → Environment Variables, then redeploy."
+    ),
+    "connection_failed": (
+        "Can't reach the database. Check the Supabase project isn't paused and that "
+        "DATABASE_URL (password, host, port) is correct."
+    ),
+    "startup_failed": "Database setup failed. See the Vercel function logs.",
+}
+_T = TypeVar("_T")
+
+
+class CachedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if path not in {"index.html", "sw.js"} and response.status_code == 200:
+            response.headers.setdefault("Cache-Control", "public, max-age=3600")
+        return response
 
 
 def _request_id(request: Request) -> str | None:
@@ -59,9 +87,9 @@ def _request_id(request: Request) -> str | None:
 def _error_response(
     request: Request,
     status: int,
-    detail,
+    detail: Any,
     message: str,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     request_id = _request_id(request)
     response_headers = dict(headers or {})
@@ -80,6 +108,63 @@ def _error_response(
         },
         headers=response_headers,
     )
+
+
+class DatabaseUnavailableMiddleware:
+    def __init__(
+        self,
+        app: ASGIApp,
+        is_connected: Callable[[], bool],
+        connect: Callable[[], None],
+        failure: Callable[[], tuple[str, str]],
+    ) -> None:
+        self.app = app
+        self.is_connected = is_connected
+        self.connect = connect
+        self.failure = failure
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if not self.is_connected():
+            self.connect()
+        if self.is_connected():
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if path == "/api/config":
+            await self.app(scope, receive, send)
+            return
+        if not path.startswith("/api/"):
+            await self.app(scope, receive, send)
+            return
+
+        reason, hint = self.failure()
+        request = Request(scope, receive=receive)
+        if scope.get("method") == "GET" and path == "/api/health":
+            response: Response = JSONResponse(
+                status_code=503,
+                content={
+                    "ok": False,
+                    "version": __version__,
+                    "database": "unavailable",
+                    "reason": reason,
+                    "hint": hint,
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+        else:
+            response = _error_response(
+                request,
+                503,
+                "Database unavailable",
+                "Database unavailable. Try again in a minute.",
+            )
+        await response(scope, receive, send)
+
 
 # Logging one of these services resolves open alerts whose metric starts with the prefix.
 _SERVICE_RESOLVES = {
@@ -140,17 +225,81 @@ def _default_db() -> str:
     if url:
         return url
     if os.environ.get("VERCEL"):
-        raise RuntimeError("DATABASE_URL must be set on Vercel (e.g. your Supabase Postgres connection string)")
+        raise _MissingDatabaseURL
     return "vitadrive.db"
 
 
-def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
+class _MissingDatabaseURL(RuntimeError):
+    pass
+
+
+def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm: Any = None,
                limits: dict[str, Limit] | None = None) -> FastAPI:
     observability.configure_logging()
     sentry_active = observability.init_sentry()
     app = FastAPI(title="VitaDrive", version=__version__,
                   description="Vehicle vitals monitoring, alerting and predictive maintenance.")
     auth = auth or ClerkAuth.from_env()
+    app_limits = default_limits()
+    if limits is not None:
+        app_limits.update(limits)
+    rate_limits_enabled = os.environ.get("VITADRIVE_RATE_LIMITS", "1").strip().lower() not in {"0", "false"}
+    vd = cast(VitaDrive, None)
+    rate_limiter: RateLimiter | None = None
+    database_connected = False
+    failure_reason = "startup_failed"
+    last_attempt: float | None = None
+    connect_lock = threading.Lock()
+
+    def connect(*, retry: bool = False) -> None:
+        nonlocal vd, rate_limiter, database_connected, failure_reason, last_attempt
+        with connect_lock:
+            if database_connected:
+                return
+            attempted_at = time_module.monotonic()
+            if retry and last_attempt is not None and attempted_at - last_attempt < _DATABASE_RETRY_INTERVAL:
+                return
+            last_attempt = attempted_at
+            store: Store | None = None
+            try:
+                db_target = db if db is not None else _default_db()
+                store = Store(db_target)
+                connected_vd = VitaDrive(store)
+                connected_rate_limiter = RateLimiter(store) if rate_limits_enabled else None
+            except Exception as exc:
+                if store is not None:
+                    store.close()
+                if isinstance(exc, _MissingDatabaseURL):
+                    failure_reason = "missing_database_url"
+                elif isinstance(exc, (OperationalError, InterfaceError, PsycopgOperationalError)):
+                    failure_reason = "connection_failed"
+                else:
+                    failure_reason = "startup_failed"
+                _log.exception("Database startup failed")
+                return
+
+            vd = connected_vd
+            rate_limiter = connected_rate_limiter
+            database_connected = True
+            failure_reason = "startup_failed"
+            app.state.vitadrive = vd
+            app.state.rate_limiter = rate_limiter
+
+    def connected() -> bool:
+        return database_connected
+
+    def database_failure() -> tuple[str, str]:
+        return failure_reason, _DATABASE_FAILURE_HINTS[failure_reason]
+
+    # Keep these inner to request ID and security middleware so their response
+    # wrappers also run when database-unavailable responses short-circuit routing.
+    app.add_middleware(
+        DatabaseUnavailableMiddleware,
+        is_connected=connected,
+        connect=lambda: connect(retry=True),
+        failure=database_failure,
+    )
+    connect()
     cors_origins = [
         origin.strip()
         for origin in os.environ.get("CORS_ORIGINS", "").split(",")
@@ -167,22 +316,16 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         )
     app.add_middleware(observability.RequestIDMiddleware, sentry_active=sentry_active)
     app.add_middleware(SecurityHeadersMiddleware, csp=build_csp(auth.frontend_api))
-    vd = VitaDrive(Store(db or _default_db()))
-    app_limits = default_limits()
-    if limits is not None:
-        app_limits.update(limits)
-    rate_limiter = (None if os.environ.get("VITADRIVE_RATE_LIMITS", "1").strip().lower() in {"0", "false"}
-                    else RateLimiter(vd.store))
-    app.state.vitadrive = vd
+    app.state.vitadrive = vd if database_connected else None
     app.state.rate_limiter = rate_limiter
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_error(request: Request, exc: StarletteHTTPException):
+    async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
         return _error_response(request, exc.status_code, exc.detail, message, exc.headers)
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, exc: RequestValidationError):
+    async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
         errors = exc.errors()
         first = errors[0] if errors else {}
         location = ".".join(str(part) for part in first.get("loc", ()))
@@ -190,7 +333,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         return _error_response(request, 422, errors, message)
 
     @app.exception_handler(RateLimited)
-    async def rate_limit_error(request: Request, exc: RateLimited):
+    async def rate_limit_error(request: Request, exc: RateLimited) -> JSONResponse:
         return _error_response(
             request,
             429,
@@ -200,7 +343,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_error(request: Request, _exc: Exception):
+    async def unhandled_error(request: Request, _exc: Exception) -> JSONResponse:
         token = observability.request_id_var.set(_request_id(request))
         try:
             _log.exception("Unhandled request exception")
@@ -218,7 +361,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         if rate_limiter is not None:
             rate_limiter.hit(app_limits[name], subject)
 
-    def limited_user(name: str):
+    def limited_user(name: str) -> Callable[..., str]:
         def dependency(user: str = Depends(current_user)) -> str:
             hit_limit(name, user)
             return user
@@ -239,38 +382,38 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
             return vin
         return owned(vin, current_user(authorization))
 
-    def guard(fn, *args, **kwargs):
+    def guard(fn: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
         try:
             return fn(*args, **kwargs)
         except UnknownVehicle:
             raise HTTPException(404, "Vehicle not registered") from None
 
-    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+    app.mount("/static", CachedStaticFiles(directory=_STATIC), name="static")
 
     @app.get("/favicon.ico", include_in_schema=False)
-    def favicon():
+    def favicon() -> FileResponse:
         return FileResponse(_STATIC / "icon-192.png")
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
-    def manifest():
+    def manifest() -> FileResponse:
         return FileResponse(_STATIC / "manifest.webmanifest", media_type="application/manifest+json")
 
     @app.get("/sw.js", include_in_schema=False)
-    def service_worker():
+    def service_worker() -> FileResponse:
         return FileResponse(_STATIC / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
     @app.get("/", include_in_schema=False)
-    def dashboard():
+    def dashboard() -> FileResponse:
         return FileResponse(_STATIC / "index.html")
 
     @app.get("/api/config", response_model=ConfigOut)
-    def config():
+    def config() -> ConfigOut:
         return ConfigOut(auth_enabled=auth.enabled, clerk_publishable_key=auth.publishable_key,
                          clerk_frontend_api=auth.frontend_api,
                          assistant_enabled=llm is not None or assistant.enabled(), push_public_key=push.public_key())
 
     @app.get("/api/health", include_in_schema=False)
-    def health():
+    def health() -> JSONResponse:
         try:
             with vd.store.transaction() as connection:
                 connection.execute(text("SELECT 1")).scalar_one()
@@ -288,11 +431,11 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         )
 
     @app.get("/api/vehicles", response_model=list[Vehicle])
-    def list_vehicles(user: str = Depends(current_user)):
+    def list_vehicles(user: str = Depends(current_user)) -> list[Vehicle]:
         return vd.store.list_vehicles(owner_id=user)
 
     @app.put("/api/vehicles/{vin}", response_model=Vehicle)
-    def register_vehicle(vin: str, vehicle: Vehicle, user: str = Depends(current_user)):
+    def register_vehicle(vin: str, vehicle: Vehicle, user: str = Depends(current_user)) -> Vehicle:
         if vehicle.vin != vin:
             raise HTTPException(400, "VIN in path and body must match")
         owner = vd.store.vehicle_owner(vin)
@@ -301,16 +444,16 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         return vd.store.upsert_vehicle(vehicle, owner_id=user)
 
     @app.delete("/api/vehicles/{vin}", status_code=204)
-    def delete_vehicle(vin: str = Depends(owned)):
+    def delete_vehicle(vin: str = Depends(owned)) -> None:
         vd.store.delete_vehicle(vin)
 
     @app.post("/api/vehicles/{vin}/api-key", response_model=ApiKeyOut)
-    def issue_api_key(vin: str = Depends(owned), user: str = Depends(limited_user("api_key"))):
+    def issue_api_key(vin: str = Depends(owned), user: str = Depends(limited_user("api_key"))) -> ApiKeyOut:
         """Create (or replace) the key the car uses to send readings. It is only shown once."""
         return ApiKeyOut(vin=vin, api_key=vd.store.rotate_api_key(vin))
 
     @app.post("/api/demo", response_model=list[Vehicle], status_code=201)
-    def add_demo_vehicles(user: str = Depends(limited_user("demo"))):
+    def add_demo_vehicles(user: str = Depends(limited_user("demo"))) -> list[Vehicle]:
         """Add two simulated vehicles with 90 days of history to the signed-in account."""
         created = []
         for i, template in enumerate(DEMO_VEHICLES):
@@ -321,7 +464,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         return created
 
     @app.post("/api/vehicles/{vin}/readings", response_model=list[Alert], status_code=201)
-    def ingest(reading: SensorReading, vin: str = Depends(ingest_vin)):
+    def ingest(reading: SensorReading, vin: str = Depends(ingest_vin)) -> list[Alert]:
         if reading.vin != vin:
             raise HTTPException(400, "VIN in path and body must match")
         hit_limit("readings", vin)
@@ -330,77 +473,96 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         return alerts
 
     @app.get("/api/vehicles/{vin}/readings", response_model=list[SensorReading])
-    def readings(vin: str = Depends(owned), limit: int = Query(200, ge=1, le=1000)):
+    def readings(vin: str = Depends(owned), limit: int = Query(200, ge=1, le=1000)) -> list[SensorReading]:
         return vd.store.readings(vin, limit=limit)
 
     @app.get("/api/vehicles/{vin}/alerts", response_model=list[Alert])
-    def alerts(vin: str = Depends(owned), active_only: bool = False, limit: int = Query(200, ge=1, le=1000)):
+    def alerts(vin: str = Depends(owned), active_only: bool = False,
+               limit: int = Query(200, ge=1, le=1000)) -> list[Alert]:
         return vd.store.alerts(vin, include_acknowledged=not active_only, limit=limit)
 
     @app.post("/api/alerts/{alert_id}/ack", status_code=204)
-    def ack(alert_id: int, user: str = Depends(current_user)):
+    def ack(alert_id: int, user: str = Depends(current_user)) -> None:
         vin = vd.store.alert_vin(alert_id)
         if vin is None or vd.store.vehicle_owner(vin) != user:
             raise HTTPException(404, "Alert not found")
         vd.store.acknowledge_alert(alert_id)
 
     @app.get("/api/vehicles/{vin}/services", response_model=list[ServiceRecord])
-    def services(vin: str = Depends(owned)):
+    def services(vin: str = Depends(owned)) -> list[ServiceRecord]:
         return vd.store.services(vin)
 
     @app.post("/api/vehicles/{vin}/services", response_model=ServiceRecord, status_code=201)
-    def add_service(body: ServiceIn, vin: str = Depends(owned)):
+    def add_service(body: ServiceIn, vin: str = Depends(owned)) -> ServiceRecord:
         with vd.store.transaction():
             record = vd.store.add_service(ServiceRecord(vin=vin, **body.model_dump()))
             related = _SERVICE_RESOLVES.get(body.item)
             if related:
                 for alert in vd.store.alerts(vin, include_acknowledged=False, limit=1000):
                     if alert.metric.startswith(related):
-                        vd.store.acknowledge_alert(alert.id)
+                        vd.store.acknowledge_alert(cast(int, alert.id))
         return record
 
     @app.get("/api/vehicles/{vin}/fuel", response_model=list[FuelLog])
-    def fuel_logs(vin: str = Depends(owned)):
+    def fuel_logs(vin: str = Depends(owned)) -> list[FuelLog]:
         return vd.store.fuel_logs(vin)
 
     @app.post("/api/vehicles/{vin}/fuel", response_model=FuelLog, status_code=201)
-    def add_fuel_log(body: FuelIn, vin: str = Depends(owned)):
+    def add_fuel_log(body: FuelIn, vin: str = Depends(owned)) -> FuelLog:
         return vd.store.add_fuel_log(FuelLog(vin=vin, **body.model_dump()))
 
     @app.delete("/api/vehicles/{vin}/fuel/{log_id}", status_code=204)
-    def delete_fuel_log(log_id: int, vin: str = Depends(owned)):
+    def delete_fuel_log(log_id: int, vin: str = Depends(owned)) -> None:
         if not vd.store.delete_fuel_log(vin, log_id):
             raise HTTPException(404, "Fill-up not found")
 
     @app.get("/api/vehicles/{vin}/costs", response_model=CostSummary)
-    def cost_summary(vin: str = Depends(owned)):
-        return costs.summarize(vd.store.get_vehicle(vin), vd.store.fuel_logs(vin))
+    def cost_summary(vin: str = Depends(owned)) -> CostSummary:
+        return costs.summarize(cast(Vehicle, vd.store.get_vehicle(vin)), vd.store.fuel_logs(vin))
+
+    @app.get("/api/vehicles/{vin}/trips")
+    def vehicle_trips(
+        vin: str = Depends(owned),
+        days: int = Query(30, ge=1, le=365),
+    ) -> dict[str, Any]:
+        vehicle = cast(Vehicle, vd.store.get_vehicle(vin))
+        today = date.today()
+        first_day = today - timedelta(days=max(days - 1, 55))
+        trips = vd.store.trips(
+            vin,
+            since=datetime.combine(first_day, time.min, tzinfo=timezone.utc),
+        )
+        recent = vd.store.trips(vin, limit=50)
+        return {
+            **trip_summary(vehicle, trips, days=days, today=today),
+            "recent": [trip_payload(vehicle, trip) for trip in recent],
+        }
 
     @app.get("/api/vehicles/{vin}/maintenance", response_model=list[MaintenanceForecast])
-    def maintenance(vin: str = Depends(owned)):
+    def maintenance(vin: str = Depends(owned)) -> list[MaintenanceForecast]:
         return guard(vd.maintenance, vin)
 
     @app.get("/api/vehicles/{vin}/maintenance/calendar.ics", response_class=Response)
-    def calendar(vin: str = Depends(owned)):
+    def calendar(vin: str = Depends(owned)) -> Response:
         today = date.today()
         forecasts = guard(vd.maintenance, vin, today=today)
         if not forecasts:
             raise HTTPException(409, "Add a sensor reading before exporting maintenance dates")
-        content = maintenance_calendar(vd.store.get_vehicle(vin), forecasts, today=today)
+        content = maintenance_calendar(cast(Vehicle, vd.store.get_vehicle(vin)), forecasts, today=today)
         return Response(content, media_type="text/calendar",
                         headers={"Content-Disposition": 'attachment; filename="vitadrive-maintenance.ics"',
                                  "Cache-Control": "private, no-store"})
 
     @app.get("/api/vehicles/{vin}/range", response_model=RangeEstimate | None)
-    def range_(vin: str = Depends(owned)):
+    def range_(vin: str = Depends(owned)) -> RangeEstimate | None:
         return guard(vd.range, vin)
 
     @app.get("/api/vehicles/{vin}/report", response_model=HealthReport)
-    def report(vin: str = Depends(owned)):
+    def report(vin: str = Depends(owned)) -> HealthReport:
         return guard(vd.report, vin)
 
     @app.post("/api/vehicles/{vin}/ask", response_model=AskOut)
-    def ask(body: AskIn, vin: str = Depends(owned), user: str = Depends(current_user)):
+    def ask(body: AskIn, vin: str = Depends(owned), user: str = Depends(current_user)) -> AskOut:
         if llm is None and not assistant.enabled():
             raise HTTPException(503, "Ask VitaDrive is off: set OPENAI_API_KEY in the server environment")
         hit_limit("ask", user)
@@ -415,7 +577,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
     def nearby_places(vin: str = Depends(owned), kind: str | None = None,
                       lat: float | None = Query(None, ge=-90, le=90), lon: float | None = Query(None, ge=-180, le=180),
                       q: str | None = Query(None, min_length=2, max_length=200),
-                      user: str = Depends(current_user)):
+                      user: str = Depends(current_user)) -> nearby.NearbyOut:
         """Shops that can fix what this car needs. Without a location, only the suggested needs are returned."""
         if kind is not None and kind not in nearby.KINDS:
             raise HTTPException(422, f"kind must be one of: {', '.join(nearby.KINDS)}")
@@ -427,7 +589,7 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         hit_limit("nearby", user)
         try:
             if lat is None or lon is None:
-                lat, lon = nearby.geocode(q)
+                lat, lon = nearby.geocode(cast(str, q))
             out.radius_km, out.places = nearby.search(lat, lon, kind)
         except nearby.PlaceNotFound as exc:
             raise HTTPException(404, str(exc)) from None
@@ -437,42 +599,43 @@ def create_app(db: str | None = None, auth: ClerkAuth | None = None, llm=None,
         return out
 
     @app.post("/api/push/subscriptions", status_code=204)
-    def push_subscribe(sub: push.PushSubscription, user: str = Depends(current_user)):
+    def push_subscribe(sub: push.PushSubscription, user: str = Depends(current_user)) -> None:
         """Remember this browser so critical alerts on the user's cars reach it as notifications."""
         if not push.enabled():
             raise HTTPException(503, "Alerts are off: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the server")
         vd.store.save_push_subscription(user, sub.model_dump())
 
     @app.delete("/api/push/subscriptions", status_code=204)
-    def push_unsubscribe(endpoint: str = Query(max_length=2000), user: str = Depends(current_user)):
+    def push_unsubscribe(endpoint: str = Query(max_length=2000),
+                         user: str = Depends(current_user)) -> None:
         vd.store.delete_push_subscription(endpoint, owner_id=user)
 
     @app.post("/api/push/test", response_model=PushTestOut)
-    def push_test(user: str = Depends(current_user)):
+    def push_test(user: str = Depends(current_user)) -> PushTestOut:
         return PushTestOut(sent=push.send_to_user(vd.store, user, {
             "title": "VitaDrive alerts are on", "body": "You'll get a notification here when a reading turns critical.",
             "url": "/", "tag": "vitadrive-test"}, ttl=600))
 
     @app.get("/api/vehicles/{vin}/photo", response_model=webinfo.CarPhoto | None)
-    def car_photo(vin: str = Depends(owned)):
+    def car_photo(vin: str = Depends(owned)) -> webinfo.CarPhoto | None:
         """A photo of this car's model from Wikipedia, or null when none is found or Wikipedia is down."""
-        v = vd.store.get_vehicle(vin)
+        v = cast(Vehicle, vd.store.get_vehicle(vin))
         try:
             return webinfo.car_photo(v.make, v.model)
         except webinfo.WebServiceError:
             return None
 
     @app.get("/api/vehicles/{vin}/recalls", response_model=webinfo.RecallsOut)
-    def car_recalls(vin: str = Depends(owned)):
+    def car_recalls(vin: str = Depends(owned)) -> webinfo.RecallsOut:
         """Safety recalls published by NHTSA for this car's make, model and year."""
-        v = vd.store.get_vehicle(vin)
+        v = cast(Vehicle, vd.store.get_vehicle(vin))
         try:
             return webinfo.recalls(v.make, v.model, v.year)
         except webinfo.WebServiceError as exc:
             raise HTTPException(502, str(exc)) from None
 
     @app.get("/api/cron/prune", response_model=retention.PruneResult, include_in_schema=False)
-    def cron_prune(authorization: str | None = Header(default=None)):
+    def cron_prune(authorization: str | None = Header(default=None)) -> retention.PruneResult:
         secret = os.environ.get("CRON_SECRET")
         if not secret:
             raise HTTPException(503, "Cron is off")

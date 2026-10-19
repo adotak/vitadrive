@@ -1,9 +1,11 @@
 """HTTP security headers and content security policy construction."""
 
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
 
 def build_csp(clerk_frontend_api: str | None) -> str:
     fapi = f"https://{clerk_frontend_api.strip().rstrip('/')}" if clerk_frontend_api else None
-    scripts = ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://challenges.cloudflare.com"]
+    scripts = ["'self'", "https://unpkg.com", "https://challenges.cloudflare.com"]
     connections = ["'self'"]
     frames = ["https://challenges.cloudflare.com"]
     if fapi:
@@ -16,7 +18,6 @@ def build_csp(clerk_frontend_api: str | None) -> str:
         ))
         frames.extend((fapi, "https://*.protect.clerk.com"))
 
-    # 'unsafe-inline' remains necessary until PR 7 moves the inline script into modules.
     directives = [
         "default-src 'self'",
         "base-uri 'self'",
@@ -41,11 +42,11 @@ def build_csp(clerk_frontend_api: str | None) -> str:
 class SecurityHeadersMiddleware:
     """Pure ASGI middleware that adds security headers to HTTP responses."""
 
-    def __init__(self, app, csp: str):
+    def __init__(self, app: ASGIApp, csp: str) -> None:
         self.app = app
         self.csp = csp
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -61,7 +62,7 @@ class SecurityHeadersMiddleware:
         )
         is_https = scope.get("scheme") == "https" or forwarded_proto == b"https"
 
-        async def send_with_security_headers(message):
+        async def send_with_security_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = message.get("headers", [])
                 existing = {name.lower() for name, _ in headers}
