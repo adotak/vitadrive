@@ -6,6 +6,10 @@ All notable changes to VitaDrive are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- New VitaDrive logo across the dashboard, sign-in page, browser tab, and app and notification icons ([#38](https://github.com/adotak/vitadrive/pull/38)).
+
 ## [1.0.1] - 2026-10-18
 
 ### Fixed
