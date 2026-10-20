@@ -6,6 +6,10 @@ All notable changes to VitaDrive are documented here. This project follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Chrome no longer warns that `apple-mobile-web-app-capable` is deprecated; the standard `mobile-web-app-capable` tag is added.
+
 ### Changed
 
 - New VitaDrive logo across the dashboard, sign-in page, browser tab, and app and notification icons ([#38](https://github.com/adotak/vitadrive/pull/38)).
