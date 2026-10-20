@@ -55,8 +55,8 @@ summary { cursor: pointer; }
 .skip-link:focus { top: 12px; }
 .sidebar { width: 226px; position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; padding: 36px 20px 24px; background: var(--forest); color: #c1d0c5; z-index: 10; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 9px; padding: 0 8px; color: white; font: 600 25px var(--display); letter-spacing: -1px; text-decoration: none; }
-.brand-mark { background: var(--accent); color: var(--forest); display: grid; place-items: center; width: 32px; height: 34px; border-radius: 10px 10px 5px 5px; }
-.brand-mark .icon { width: 23px; height: 23px; stroke-width: 1.8; }
+.brand-mark { background: var(--accent); color: var(--forest); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; }
+.brand-mark .icon { width: 34px; height: 34px; }
 .brand-dot { color: var(--accent); margin-left: -8px; }
 .nav-label { margin: 50px 14px 14px; color: #a5bdb0; font-size: 11px; font-weight: 700; letter-spacing: 1.8px; }
 .nav-links { display: grid; gap: 7px; }
@@ -265,7 +265,8 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
 #landing video, #landing .shade { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
 #landing .shade { background: linear-gradient(90deg, #102e28f2, #102e28b3 45%, #102e2866), linear-gradient(0deg, #102e28, transparent 30%); }
 #landing .hero > :not(video):not(.shade) { position: relative; z-index: 1; }
-#landing .brand { padding: 0; margin-bottom: 56px; display: block; font-size: 26px; }
+#landing .brand { padding: 0; margin-bottom: 56px; display: flex; align-items: center; gap: 0; font-size: 26px; }
+#landing .brand img { margin-right: 14px; border-radius: 11px; box-shadow: 0 8px 24px #0006; }
 #landing .brand span, #landing .tagline em { color: var(--accent); font-style: normal; }
 #landing .tagline { font: 500 clamp(34px, 4.6vw, 68px)/1.08 var(--display); letter-spacing: -2.5px; margin: 0 0 24px; }
 #landing .lead { font-size: 16px; color: #cbdcd0; max-width: 530px; margin: 0 0 28px; }
@@ -316,8 +317,9 @@ th { font-size: 12px; font-weight: 500; color: var(--mute); }
   .nav-links a:hover { background: #e7eddf; color: var(--fg); }
   body.dashboard header { margin: 0; padding: 12px 18px; height: 96px; position: fixed; inset: 0 0 auto; gap: 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-rows: 32px 30px; grid-template-areas: 'brand alerts user' 'vehicle key demo'; }
   body.dashboard { padding-top: 96px; }
-  .mobile-brand { grid-area: brand; display: block; margin-right: auto; color: var(--forest); font: 600 21px var(--display); letter-spacing: -1px; text-decoration: none; }
+  .mobile-brand { grid-area: brand; display: flex; align-items: center; margin-right: auto; color: var(--forest); font: 600 21px var(--display); letter-spacing: -1px; text-decoration: none; }
   .mobile-brand span { color: #63864d; }
+  .mobile-brand img { margin-right: 8px; border-radius: 7px; }
   header select { grid-area: vehicle; width: 100%; max-width: none; padding: 6px 9px; height: 30px; }
   header .alerts-menu { grid-column: 2 / 4; grid-row: 1; justify-self: start; max-width: calc(100% - 38px); }
   #alertsBtn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
