@@ -1,3 +1,5 @@
+<img src="vitadrive/static/logo.svg" alt="VitaDrive logo" width="72">
+
 # VitaDrive
 
 **Turn vehicle telemetry into clear health alerts, maintenance forecasts, range estimates, and trip history.**

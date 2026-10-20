@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="VitaDrive">
+  <defs>
+    <linearGradient id="vd-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#215a4a"/><stop offset="1" stop-color="#133429"/></linearGradient>
+    <linearGradient id="vd-line" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eef8d6"/><stop offset="1" stop-color="#c3e48d"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#vd-tile)"/>
+  <path d="M11.5 32.5H18.5L23 24L31.5 47.5L42 16.5" fill="none" stroke="url(#vd-line)" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="48.5" cy="32.5" r="3.7" fill="#d6edab"/>
+</svg>

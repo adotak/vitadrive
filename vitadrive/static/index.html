@@ -7,6 +7,7 @@
 <meta name="description" content="Car vitals monitoring, warnings and predicted maintenance dates.">
 <meta name="theme-color" content="#173e35">
 <link rel="preconnect" href="https://thumb.wikimedia.org" crossorigin>
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <link rel="icon" type="image/png" href="/static/icon-192.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -27,10 +28,11 @@
   <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></symbol>
   <symbol id="i-road" viewBox="0 0 24 24"><path d="m5 21 4-18m10 18L15 3M12 4v3m0 4v3m0 4v3"/></symbol>
+  <symbol id="i-logo" viewBox="0 0 64 64"><path d="M11.5 32.5H18.5L23 24L31.5 47.5L42 16.5" stroke-width="5.4"/><circle cx="48.5" cy="32.5" r="3.7" fill="currentColor" stroke="none"/></symbol>
 </defs></svg>
 <a class="skip-link" href="#main">Skip to dashboard</a>
 <aside class="sidebar" id="sidebar" aria-label="Dashboard navigation" hidden>
-  <a class="brand" href="#overview" aria-label="VitaDrive overview"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-road"/></svg></span>VitaDrive<span class="brand-dot">.</span></a>
+  <a class="brand" href="#overview" aria-label="VitaDrive overview"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-logo"/></svg></span>VitaDrive<span class="brand-dot">.</span></a>
   <div class="nav-label">YOUR GARAGE</div>
   <nav class="nav-links">
     <a href="#overview" class="active" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg>Overview</a>
@@ -49,7 +51,7 @@
   <div class="sidebar-footer">VITADRIVE <span>Made for the road.</span></div>
 </aside>
 <header>
-  <a class="mobile-brand" href="#overview">VitaDrive<span>.</span></a>
+  <a class="mobile-brand" href="#overview"><img src="/static/logo.svg" alt="" width="26" height="26">VitaDrive<span>.</span></a>
   <div class="breadcrumb">My garage <span>/</span> <b id="currentSection">Overview</b></div>
   <select id="vehicle" aria-label="Vehicle"></select>
   <span style="flex:1"></span>
@@ -65,7 +67,7 @@
     <video muted loop playsinline preload="none"></video>
     <div class="shade"></div>
     <div>
-      <div class="brand">Vita<span>Drive</span></div>
+      <div class="brand"><img src="/static/logo.svg" alt="" width="44" height="44">Vita<span>Drive</span></div>
       <h1 class="tagline">Your car's vitals,<br><em>always in view.</em></h1>
       <p class="lead">Real-time health monitoring, early warnings and predicted maintenance dates for petrol, hybrid and electric cars.</p>
       <ul>
