@@ -1,4 +1,5 @@
 import re
+import struct
 from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 
@@ -150,6 +151,26 @@ def test_installable_app_assets(tmp_path):
     not_found = client.get("/nope").json()
     assert not_found["detail"] == "Not Found"
     assert not_found["error"]["code"] == "not_found"
+
+
+def _png_size(data: bytes) -> tuple[int, int]:
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", data[16:24])
+    return width, height
+
+
+def test_app_icons_match_declared_sizes(tmp_path):
+    client = TestClient(create_app(str(tmp_path / "icons.db")))
+    for icon in client.get("/manifest.webmanifest").json()["icons"]:
+        width, height = icon["sizes"].split("x")
+        assert _png_size(client.get(icon["src"]).content) == (int(width), int(height)), icon["src"]
+    assert _png_size(client.get("/static/apple-touch-icon.png").content) == (180, 180)
+    html = client.get("/").text
+    hrefs = re.findall(r'<link rel="(?:icon|apple-touch-icon)"[^>]*href="([^"]+)"', html)
+    assert "/static/logo.svg" in hrefs
+    for href in hrefs:
+        assert client.get(href).status_code == 200, href
+    assert client.get("/static/logo.svg").headers["content-type"].startswith("image/svg+xml")
 
 
 def test_dashboard_typography_assets(tmp_path):
