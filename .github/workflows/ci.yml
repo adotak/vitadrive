@@ -26,7 +26,7 @@ jobs:
       - run: ruff check .
       - run: mypy
       - run: pytest -q --cov --cov-report=term --cov-report=xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.python-version == '3.12'
         with:
           name: coverage
@@ -58,7 +58,7 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
       - run: python -m playwright install --with-deps chromium
       - run: pytest e2e -q --browser chromium --screenshot only-on-failure --tracing retain-on-failure --output e2e-artifacts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: e2e-artifacts
@@ -76,7 +76,7 @@ jobs:
         with:
           node-version: "20"
       - run: npx -y @lhci/cli@0.14.x autorun
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lighthouse-reports
